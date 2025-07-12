@@ -8,7 +8,7 @@ AFRAME.registerComponent('hand-tracker', {
         
         if (!frame || !referenceSpace) return;
 
-        
+        // Obtener datos de ambas manos
         for (const inputSource of session.inputSources) {
             if (inputSource.hand) {
                 this.logHandData(inputSource, frame, referenceSpace);
@@ -29,4 +29,5 @@ AFRAME.registerComponent('hand-tracker', {
             }
         }
     }
+
 });
