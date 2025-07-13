@@ -1,15 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Test WebXR</title>
+    <title>Posiciones WebXR</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <!--<script src="Posiciones.js"></script> -->
 </head>
 <body>
-    <a-scene vr-mode-ui="enabled: true">
+    <a-scene vr-mode-ui="enabled: true" webxr="requiredFeatures: hand-tracking;">
         <a-camera position="0 1.6 3"></a-camera>
-        <a-box position="0 0.5 -3" color="red"></a-box>
-        <a-text position="0 2 -2" value="TEST - Si ves esto, A-Frame funciona" color="white"></a-text>
+        <a-entity hand-tracker></a-entity>
+        
+        <!-- Panel para mostrar información -->
+        <a-plane 
+            id="infoPanel" 
+            position="0 2 -2" 
+            scale="4 3 1" 
+            color="#000000" 
+            opacity="0.8">
+        </a-plane>
+        
+        <a-text 
+            id="handInfo" 
+            position="0 2 -1.9" 
+            value="Esperando datos de manos..." 
+            color="white" 
+            align="center"
+            width="8">
+        </a-text>
+        
         <a-sky color="#000011"></a-sky>
     </a-scene>
+    
+    
 </body>
 </html>
