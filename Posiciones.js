@@ -1,149 +1,126 @@
+// Componente para detectar manos
 AFRAME.registerComponent('hand-tracker', {
+    
     init: function () {
-        console.log("🚀 Hand tracker iniciado");
-        this.infoText = document.querySelector('#handInfo');
-        this.lastUpdate = 0;
-        this.updateInterval = 200; // Actualizar cada 200ms
-        this.stepCounter = 0;
+        console.log("Sistema iniciado");
+        
+        // Encontrar donde vamos a escribir en pantalla
+        this.pantalla = document.querySelector('#handInfo');
+        
+        // Variables de tiempo
+        this.ultimoTiempo = 0;
+        this.intervalo = 500; // Actualizar cada medio segundo
     },
 
     tick: function () {
-        const currentTime = Date.now();
-        if (currentTime - this.lastUpdate < this.updateInterval) return;
+        // Controlar tiempo para no ir muy rápido
+        const ahora = Date.now();
+        if (ahora - this.ultimoTiempo < this.intervalo) {
+            return;
+        }
+        this.ultimoTiempo = ahora;
         
-        this.lastUpdate = currentTime;
-        this.stepCounter++;
-        
-        // VERIFICAR ESTADO PASO A PASO
-        let displayText = "=== DETECTOR DE MANOS WebXR ===\n\n";
-        
-        // PASO 1: Verificar si estamos en VR
+        // Obtener las herramientas de WebXR
         const renderer = this.el.sceneEl.renderer;
-        if (!renderer.xr.isPresenting) {
-            displayText += "❌ PASO 1: NO estás en modo VR\n";
-            displayText += "💡 Presiona el botón 'Enter VR'\n";
-            displayText += `⏱️ Tiempo: ${new Date().toLocaleTimeString()}\n`;
-            this.updateDisplay(displayText);
-            return;
-        }
-        
-        displayText += "✅ PASO 1: En modo VR\n";
-        
-        // PASO 2: Verificar sesión WebXR
         const session = renderer.xr.getSession();
-        if (!session) {
-            displayText += "❌ PASO 2: Sin sesión WebXR\n";
-            this.updateDisplay(displayText);
-            return;
-        }
-        
-        displayText += "✅ PASO 2: Sesión WebXR activa\n";
-        
-        // PASO 3: Verificar frame y referenceSpace
         const frame = this.el.sceneEl.frame;
         const referenceSpace = renderer.xr.getReferenceSpace();
         
-        if (!frame || !referenceSpace) {
-            displayText += "❌ PASO 3: Sin frame/referenceSpace\n";
-            this.updateDisplay(displayText);
-            return;
-        }
-        
-        displayText += "✅ PASO 3: Frame y referenceSpace OK\n";
-        
-        // PASO 4: Verificar input sources
+        // Obtener las manos
         const inputSources = session.inputSources;
-        displayText += `📱 Input sources: ${inputSources.length}\n\n`;
         
-        if (inputSources.length === 0) {
-            displayText += "⚠️ PASO 4: Sin input sources\n";
-            displayText += "💡 Mueve las manos frente a las cámaras\n";
-            this.updateDisplay(displayText);
-            return;
-        }
+        // Crear texto para la pantalla
+        let textoPantalla = "=== MANOS ===\n\n";
         
-        // PASO 5: Analizar cada input source
-        let handsDetected = 0;
-        
+        // Revisar cada dispositivo
         for (let i = 0; i < inputSources.length; i++) {
-            const inputSource = inputSources[i];
+            const dispositivo = inputSources[i];
             
-            displayText += `🎮 Input ${i + 1}:\n`;
-            displayText += `   Lado: ${inputSource.handedness}\n`;
-            displayText += `   Tipo: ${inputSource.targetRayMode}\n`;
-            displayText += `   Mano: ${inputSource.hand ? '✅ SÍ' : '❌ NO'}\n`;
-            
-            if (inputSource.hand) {
-                handsDetected++;
-                displayText += this.getHandPositions(inputSource, frame, referenceSpace);
+            // Si es una mano
+            if (dispositivo.hand) {
+                // PANTALLA: Solo lo básico
+                textoPantalla = textoPantalla + this.obtenerDatosBasicos(dispositivo, frame, referenceSpace);
+                
+                // CONSOLA: Todo completo
+                this.mostrarTodoEnConsola(dispositivo, frame, referenceSpace);
             }
-            
-            displayText += "\n";
         }
         
-        // RESUMEN
-        displayText += `🖐️ MANOS DETECTADAS: ${handsDetected}\n`;
-        displayText += `🔄 Updates: ${this.stepCounter}\n`;
-        displayText += `⏱️ ${new Date().toLocaleTimeString()}\n`;
-        
-        if (handsDetected === 0) {
-            displayText += "\n💡 CONSEJOS:\n";
-            displayText += "• Activa Hand Tracking en Quest\n";
-            displayText += "• Mejora la iluminación\n";
-            displayText += "• Manos visibles a las cámaras\n";
-        }
-        
-        this.updateDisplay(displayText);
+        // Mostrar en pantalla
+        this.pantalla.setAttribute('value', textoPantalla);
     },
 
-    getHandPositions: function (inputSource, frame, referenceSpace) {
-        let handText = `   🖐️ POSICIONES MANO ${inputSource.handedness.toUpperCase()}:\n`;
+    // Función para obtener solo 6 puntos principales
+    obtenerDatosBasicos: function (dispositivo, frame, referenceSpace) {
+        let texto = "MANO " + dispositivo.handedness.toUpperCase() + ":\n";
         
-        // Articulaciones principales para mostrar
-        const mainJoints = [
+        // Lista simple de lo que queremos mostrar
+        const puntos = [
             'wrist',
-            'thumb-tip', 
-            'index-finger-tip', 
-            'middle-finger-tip', 
-            'ring-finger-tip', 
+            'thumb-tip',
+            'index-finger-tip',
+            'middle-finger-tip',
+            'ring-finger-tip',
             'pinky-finger-tip'
         ];
         
-        const jointLabels = [
+        const nombres = [
             'Muñeca',
             'Pulgar',
-            'Índice', 
-            'Medio', 
-            'Anular', 
+            'Indice',
+            'Medio',
+            'Anular',
             'Meñique'
         ];
         
-        for (let i = 0; i < mainJoints.length; i++) {
-            const jointName = mainJoints[i];
-            const label = jointLabels[i];
-            const joint = inputSource.hand.get(jointName);
+        // Revisar cada punto
+        for (let i = 0; i < puntos.length; i++) {
+            const joint = dispositivo.hand.get(puntos[i]);
+            const pose = frame.getJointPose(joint, referenceSpace);
             
-            if (joint) {
-                const jointPose = frame.getJointPose(joint, referenceSpace);
-                if (jointPose) {
-                    const pos = jointPose.transform.position;
-                    handText += `   ${label}: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})\n`;
-                } else {
-                    handText += `   ${label}: Sin pose\n`;
-                }
+            if (pose) {
+                const x = pose.transform.position.x.toFixed(2);
+                const y = pose.transform.position.y.toFixed(2);
+                const z = pose.transform.position.z.toFixed(2);
+                
+                texto = texto + "  " + nombres[i] + ": (" + x + ", " + y + ", " + z + ")\n";
             } else {
-                handText += `   ${label}: No encontrado\n`;
+                texto = texto + "  " + nombres[i] + ": Sin datos\n";
             }
         }
         
-        return handText;
+        return texto + "\n";
     },
 
-    updateDisplay: function(text) {
-        if (this.infoText) {
-            this.infoText.setAttribute('value', text);
+    // Función para mostrar todo en consola
+    mostrarTodoEnConsola: function (dispositivo, frame, referenceSpace) {
+        console.log("========== MANO " + dispositivo.handedness.toUpperCase() + " ==========");
+        
+        let total = 0;
+        let conDatos = 0;
+        
+        // Revisar TODAS las articulaciones
+        for (const [nombre, joint] of dispositivo.hand) {
+            total = total + 1;
+            
+            const pose = frame.getJointPose(joint, referenceSpace);
+            
+            if (pose) {
+                conDatos = conDatos + 1;
+                
+                const x = pose.transform.position.x.toFixed(4);
+                const y = pose.transform.position.y.toFixed(4);
+                const z = pose.transform.position.z.toFixed(4);
+                const radio = pose.radius.toFixed(4);
+                
+                console.log(nombre + " | X: " + x + " | Y: " + y + " | Z: " + z + " | Radio: " + radio);
+            } else {
+                console.log(nombre + " | SIN DATOS");
+            }
         }
-        // También en consola para debug remoto
-        console.log(text);
+        
+        console.log("Total articulaciones: " + total);
+        console.log("Con datos: " + conDatos);
+        console.log("----------------------------------------");
     }
 });
