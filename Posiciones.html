@@ -2,11 +2,10 @@
 <html>
 <head>
     <title>Posiciones WebXR</title>
-    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <script src="Posiciones.js"></script> 
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
 </head>
 <body>
-    <a-scene vr-mode-ui="enabled: true">
+    <a-scene vr-mode-ui="enabled: true" webxr="requiredFeatures: hand-tracking;">
         <a-camera position="0 1.6 3"></a-camera>
         <a-entity hand-tracker></a-entity>
         
@@ -14,23 +13,24 @@
         <a-plane 
             id="infoPanel" 
             position="0 2 -2" 
-            scale="4 3 1" 
+            scale="6 4 1" 
             color="#000000" 
-            opacity="0.8">
+            opacity="0.9">
         </a-plane>
         
         <a-text 
             id="handInfo" 
             position="0 2 -1.9" 
             value="Esperando datos de manos..." 
-            color="white" 
+            color="lime" 
             align="center"
-            width="8">
+            width="12"
+            wrap-count="60">
         </a-text>
         
-        <a-sky color="#000011"></a-sky>
+        <a-sky color="#001122"></a-sky>
     </a-scene>
     
-    
+    <script src="Posiciones.js"></script>
 </body>
 </html>
