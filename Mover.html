@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Pinch + Manos (Esferas)</title>
+  <title>Pinch Move con OBB</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="GestoPellizco.js"></script>
   <script src="ManosEsferas.js"></script>
@@ -12,29 +12,52 @@
 <a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking">
   <a-camera position="0 1.6 2"></a-camera>
 
-  <!-- Detector de pellizco -->
+  <!-- Detector de pellizco con colisionadores OBB -->
   <a-entity id="detector"
-            gesto-pellizco="hand:any; startDistance:0.025; endDistance:0.035; emitEachFrame:true; log:true">
+            gesto-pellizco="hand:any; 
+                           startDistance:0.025; 
+                           endDistance:0.035; 
+                           emitEachFrame:true; 
+                           log:false;
+                           colliderSize:0.08 0.08 0.08;
+                           debugCollider:true">
   </a-entity>
 
-  <!-- Visualización de TODAS las articulaciones como esferas -->
-  <a-entity manos-esferas="useJointRadius:true; colorLeft:#39f; colorRight:#f93; opacity:0.9; labels:false"></a-entity>
+  <!-- Visualización de articulaciones -->
+  <a-entity manos-esferas="useJointRadius:true; 
+                           colorLeft:#39f; 
+                           colorRight:#f93; 
+                           opacity:0.9; 
+                           labels:false">
+  </a-entity>
 
-  <!-- Objeto que se mueve con pellizco -->
+  <!-- Objeto movible con colisionador OBB -->
   <a-box id="cubo"
          position="0 1.4 -1"
          depth="0.3" height="0.3" width="0.3"
          color="#4CAF50"
-         pinch-move="hand:any; radius:0.15; rotateMode:full; debug:false">
+         pinch-move="hand:any; 
+                    colliderSize:0.3 0.3 0.3;
+                    debug:true">
   </a-box>
 
-  <!-- Mensaje visual para feedback del gesto -->
+  <!-- Otro objeto para probar -->
+  <a-sphere id="esfera"
+            position="0.6 1.4 -1"
+            radius="0.15"
+            color="#FF5722"
+            pinch-move="hand:any;
+                       colliderSize:0.3 0.3 0.3;
+                       debug:true">
+  </a-sphere>
+
+  <!-- Mensaje visual -->
   <a-text id="pinchMessage"
           position="0 1.9 -1.2"
           align="center"
           width="2.5"
           color="#AAAAFF"
-          value="Haz un pellizco cerca del cubo para moverlo">
+          value="Haz un pellizco cerca del objeto">
   </a-text>
 
   <a-sky color="#02111f"></a-sky>
