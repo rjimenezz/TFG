@@ -122,9 +122,6 @@ AFRAME.registerComponent('gesto-pellizco', {
             // Rotación del colisionador: usar la orientación de la muñeca
             const wQuat = wristPose.transform.orientation;
             handState.obb.quaternion.set(wQuat.x, wQuat.y, wQuat.z, wQuat.w);
-            
-            // Por ahora: orientación fija (identidad = no rotada)
-            //handState.obb.quaternion.identity();
 
             // Actualizar Box3 con tamaño FIJO de colliderSize
             handState.obb.box3.setFromCenterAndSize(handState.obb.center, handState.obb.size);
@@ -186,12 +183,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!detector) return;
 
     detector.addEventListener('pinchstart', e => {
-        console.log('[PINCH] start', e.detail);
+        //console.log('[PINCH] start', e.detail);
         setMessage(`PINCH START (${e.detail.hand})`, '#00FF66', null);
     });
 
     detector.addEventListener('pinchend', e => {
-        console.log('[PINCH] end', e.detail);
+        //console.log('[PINCH] end', e.detail);
         setMessage(`PINCH END (${e.detail.hand})`, '#FF5555', 1200);
     });
 });

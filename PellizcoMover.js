@@ -92,6 +92,7 @@ AFRAME.registerComponent('pinch-move', {
           const wasInContact = this.inContact[h];
           this.inContact[h] = this._testOBBCollisionSAT(handOBB, this.obb);
           
+          // LOG: solo cambios de contacto
           if (this.inContact[h] && !wasInContact) {
             console.log(`[CONTACTO] 🟢 Mano ${h} TOCANDO objeto ${this.el.id || 'sin-id'}`);
             this.el.emit('hand-contact-start', { hand: h }, false);
@@ -108,7 +109,6 @@ AFRAME.registerComponent('pinch-move', {
     // Si está agarrado pero ya no hay contacto O no hay pellizco -> soltar
     if (this.grabbing) {
       if (!this.inContact[this.grabHand] || !this.isPinching[this.grabHand]) {
-        console.log(`[AGARRE] ⚠️ Soltando objeto (contacto=${this.inContact[this.grabHand]}, pellizco=${this.isPinching[this.grabHand]})`);
         this._releaseGrab();
       }
     }
@@ -200,13 +200,11 @@ AFRAME.registerComponent('pinch-move', {
     const hand = e.detail && e.detail.hand;
     if (!hand || !this._matchHand(hand)) return;
 
-    console.log(`[PELLIZCO] ✊ Pinch START mano ${hand} (contacto=${this.inContact[hand]})`);
     this.isPinching[hand] = true;
 
+    // Solo agarrar si hay contacto previo
     if (!this.grabbing && this.inContact[hand]) {
       this._startGrab(hand, e.detail.obb);
-    } else if (!this.inContact[hand]) {
-      console.log(`[PELLIZCO] ⚠️ Pellizco detectado pero SIN contacto con objeto`);
     }
   },
 
@@ -214,10 +212,12 @@ AFRAME.registerComponent('pinch-move', {
     const hand = e.detail && e.detail.hand;
     if (!hand || !this._matchHand(hand)) return;
 
+    // Intentar agarrar si se cumplen condiciones
     if (!this.grabbing && this.isPinching[hand] && this.inContact[hand]) {
       this._startGrab(hand, e.detail.obb);
     }
 
+    // Actualizar posición si está agarrado
     if (this.grabbing && hand === this.grabHand) {
       const handOBB = e.detail.obb;
       if (!handOBB) return;
@@ -233,7 +233,6 @@ AFRAME.registerComponent('pinch-move', {
     const hand = e.detail && e.detail.hand;
     if (!hand) return;
 
-    console.log(`[PELLIZCO] ✋ Pinch END mano ${hand}`);
     this.isPinching[hand] = false;
 
     if (this.grabbing && hand === this.grabHand) {
@@ -250,7 +249,7 @@ AFRAME.registerComponent('pinch-move', {
     this.el.object3D.getWorldPosition(this.tmpWorldPos);
     this.grabOffset.copy(this.tmpWorldPos).sub(handOBB.center);
 
-    console.log(`[AGARRE] 🎯 AGARRANDO objeto ${this.el.id || 'sin-id'} con mano ${hand}`);
+    console.log(`[AGARRE] 🎯 AGARRADO objeto ${this.el.id || 'sin-id'} con mano ${hand}`);
     this.el.emit('pinchmoverstart', { hand }, false);
     this.el.setAttribute('color', '#ff4444');
   },
@@ -262,7 +261,7 @@ AFRAME.registerComponent('pinch-move', {
     this.grabbing = false;
     this.grabHand = null;
     
-    console.log(`[AGARRE] 🔓 SOLTANDO objeto ${this.el.id || 'sin-id'} (mano ${hand})`);
+    console.log(`[AGARRE] 🔓 SOLTADO objeto ${this.el.id || 'sin-id'} (mano ${hand})`);
     this.el.emit('pinchmoverend', { hand }, false);
     this.el.setAttribute('color', '#4CAF50');
   }
