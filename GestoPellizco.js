@@ -10,12 +10,12 @@ AFRAME.registerComponent('gesto-pellizco', {
         endDistance: {type: 'number', default: 0.035},
         emitEachFrame: {type: 'boolean', default: false},
         log: {type: 'boolean', default: false},
-        // Tamaño del colisionador OBB de la mano (en metros) - aumentado para cubrir toda la mano
-        colliderSize: {type: 'vec3', default: {x: 0.12, y: 0.08, z: 0.18}},
+        // Tamaño del colisionador OBB de la mano (caja fija, no ajustada a forma real)
+        colliderSize: {type: 'vec3', default: {x: 0.15, y: 0.15, z: 0.15}},
         debugCollider: {type: 'boolean', default: false}
     },
 
-    init: function () {
+        init: function () {
         this.renderer = null;
         this.referenceSpace = null;
         this.state = {
@@ -23,7 +23,6 @@ AFRAME.registerComponent('gesto-pellizco', {
             right: { pinching: false, lastDistance: null, obb: null }
         };
 
-        // Crear colisionadores OBB (THREE.Box3 + orientación)
         ['left', 'right'].forEach(h => {
             const handState = this.state[h];
             handState.obb = {
@@ -33,8 +32,14 @@ AFRAME.registerComponent('gesto-pellizco', {
                     this.data.colliderSize.y,
                     this.data.colliderSize.z
                 ),
-                quaternion: new THREE.Quaternion(), // orientación
-                box3: new THREE.Box3() // AABB temporal para test rápido
+                halfSize: new THREE.Vector3(
+                    this.data.colliderSize.x / 2,
+                    this.data.colliderSize.y / 2,
+                    this.data.colliderSize.z / 2
+                ),
+                quaternion: new THREE.Quaternion(),
+                matrix: new THREE.Matrix4(),
+                box3: new THREE.Box3()  // ← AÑADIDO: faltaba esto
             };
 
             // Debug visual opcional
@@ -51,7 +56,6 @@ AFRAME.registerComponent('gesto-pellizco', {
             }
         });
     },
-
     remove: function () {
         ['left', 'right'].forEach(h => {
             if (this.state[h].obb.debugBox) {
@@ -106,20 +110,23 @@ AFRAME.registerComponent('gesto-pellizco', {
             handState.lastDistance = distance;
 
             // Centro del colisionador: punto medio entre muñeca y punta del dedo medio
-            // Esto centra mejor el colisionador en toda la mano
             const wPos = wristPose.transform.position;
             const mPos = middleTipPose.transform.position;
-            const centerX = (wPos.x + mPos.x) / 2;
-            const centerY = (wPos.y + mPos.y) / 2;
-            const centerZ = (wPos.z + mPos.z) / 2;
+            handState.obb.center.set(
+                (wPos.x + mPos.x) / 2,
+                (wPos.y + mPos.y) / 2,
+                (wPos.z + mPos.z) / 2
+            );
             
-            handState.obb.center.set(centerX, centerY, centerZ);
-            
-            // Orientación basada en la muñeca
+           
+            // Rotación del colisionador: usar la orientación de la muñeca
             const wQuat = wristPose.transform.orientation;
             handState.obb.quaternion.set(wQuat.x, wQuat.y, wQuat.z, wQuat.w);
+            
+            // Por ahora: orientación fija (identidad = no rotada)
+            //handState.obb.quaternion.identity();
 
-            // Actualizar Box3 (AABB en mundo) para test rápido
+            // Actualizar Box3 con tamaño FIJO de colliderSize
             handState.obb.box3.setFromCenterAndSize(handState.obb.center, handState.obb.size);
 
             // Debug visual
