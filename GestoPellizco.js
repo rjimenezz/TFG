@@ -10,8 +10,8 @@ AFRAME.registerComponent('gesto-pellizco', {
         endDistance: {type: 'number', default: 0.035},
         emitEachFrame: {type: 'boolean', default: false},
         log: {type: 'boolean', default: false},
-        // Tamaño del colisionador OBB de la mano (en metros)
-        colliderSize: {type: 'vec3', default: {x: 0.08, y: 0.08, z: 0.08}},
+        // Tamaño del colisionador OBB de la mano (en metros) - aumentado para cubrir toda la mano
+        colliderSize: {type: 'vec3', default: {x: 0.12, y: 0.08, z: 0.18}},
         debugCollider: {type: 'boolean', default: false}
     },
 
@@ -85,12 +85,16 @@ AFRAME.registerComponent('gesto-pellizco', {
             const thumbJoint = inputSource.hand.get('thumb-tip');
             const indexJoint = inputSource.hand.get('index-finger-tip');
             const wristJoint = inputSource.hand.get('wrist');
-            if (!thumbJoint || !indexJoint || !wristJoint) continue;
+            const middleTipJoint = inputSource.hand.get('middle-finger-tip');
+            
+            if (!thumbJoint || !indexJoint || !wristJoint || !middleTipJoint) continue;
 
             const thumbPose = frame.getJointPose(thumbJoint, this.referenceSpace);
             const indexPose = frame.getJointPose(indexJoint, this.referenceSpace);
             const wristPose = frame.getJointPose(wristJoint, this.referenceSpace);
-            if (!thumbPose || !indexPose || !wristPose) continue;
+            const middleTipPose = frame.getJointPose(middleTipJoint, this.referenceSpace);
+            
+            if (!thumbPose || !indexPose || !wristPose || !middleTipPose) continue;
 
             // Distancia pellizco
             const dx = thumbPose.transform.position.x - indexPose.transform.position.x;
@@ -101,14 +105,21 @@ AFRAME.registerComponent('gesto-pellizco', {
             const handState = this.state[handedness];
             handState.lastDistance = distance;
 
-            // Actualizar OBB de la mano (centro = wrist, orientación = muñeca)
+            // Centro del colisionador: punto medio entre muñeca y punta del dedo medio
+            // Esto centra mejor el colisionador en toda la mano
             const wPos = wristPose.transform.position;
+            const mPos = middleTipPose.transform.position;
+            const centerX = (wPos.x + mPos.x) / 2;
+            const centerY = (wPos.y + mPos.y) / 2;
+            const centerZ = (wPos.z + mPos.z) / 2;
+            
+            handState.obb.center.set(centerX, centerY, centerZ);
+            
+            // Orientación basada en la muñeca
             const wQuat = wristPose.transform.orientation;
-            handState.obb.center.set(wPos.x, wPos.y, wPos.z);
             handState.obb.quaternion.set(wQuat.x, wQuat.y, wQuat.z, wQuat.w);
 
             // Actualizar Box3 (AABB en mundo) para test rápido
-            const halfSize = handState.obb.size.clone().multiplyScalar(0.5);
             handState.obb.box3.setFromCenterAndSize(handState.obb.center, handState.obb.size);
 
             // Debug visual
