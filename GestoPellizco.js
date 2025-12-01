@@ -1,27 +1,64 @@
 /**
- * Componente A-Frame: gesto-pellizco
- * Sólo lógica de detección y eventos (sin elementos visuales).
- * Eventos: pinchstart, pinchmove (opcional), pinchend.
+ * Componente: gesto-pellizco
+ * Detecta pellizco + crea colisionador OBB por cada mano.
+ * Eventos: pinchstart, pinchmove, pinchend (con info de colisión).
  */
 AFRAME.registerComponent('gesto-pellizco', {
     schema: {
-        hand: {type: 'string', default: 'any'},      // 'left' | 'right' | 'any'
+        hand: {type: 'string', default: 'any'},
         startDistance: {type: 'number', default: 0.025},
-        endDistance:   {type: 'number', default: 0.035},
+        endDistance: {type: 'number', default: 0.035},
         emitEachFrame: {type: 'boolean', default: false},
-        log: {type: 'boolean', default: false}
+        log: {type: 'boolean', default: false},
+        // Tamaño del colisionador OBB de la mano (en metros)
+        colliderSize: {type: 'vec3', default: {x: 0.08, y: 0.08, z: 0.08}},
+        debugCollider: {type: 'boolean', default: false}
     },
 
     init: function () {
         this.renderer = null;
         this.referenceSpace = null;
         this.state = {
-            left:  { pinching: false, lastDistance: null },
-            right: { pinching: false, lastDistance: null }
+            left:  { pinching: false, lastDistance: null, obb: null },
+            right: { pinching: false, lastDistance: null, obb: null }
         };
+
+        // Crear colisionadores OBB (THREE.Box3 + orientación)
+        ['left', 'right'].forEach(h => {
+            const handState = this.state[h];
+            handState.obb = {
+                center: new THREE.Vector3(),
+                size: new THREE.Vector3(
+                    this.data.colliderSize.x,
+                    this.data.colliderSize.y,
+                    this.data.colliderSize.z
+                ),
+                quaternion: new THREE.Quaternion(), // orientación
+                box3: new THREE.Box3() // AABB temporal para test rápido
+            };
+
+            // Debug visual opcional
+            if (this.data.debugCollider) {
+                const debugBox = document.createElement('a-box');
+                debugBox.setAttribute('width', this.data.colliderSize.x);
+                debugBox.setAttribute('height', this.data.colliderSize.y);
+                debugBox.setAttribute('depth', this.data.colliderSize.z);
+                debugBox.setAttribute('color', h === 'left' ? '#0af' : '#fa0');
+                debugBox.setAttribute('opacity', 0.2);
+                debugBox.setAttribute('wireframe', true);
+                this.el.sceneEl.appendChild(debugBox);
+                handState.obb.debugBox = debugBox;
+            }
+        });
     },
 
-    remove: function () {},
+    remove: function () {
+        ['left', 'right'].forEach(h => {
+            if (this.state[h].obb.debugBox) {
+                this.state[h].obb.debugBox.remove();
+            }
+        });
+    },
 
     tick: function () {
         const sceneEl = this.el.sceneEl;
@@ -42,17 +79,20 @@ AFRAME.registerComponent('gesto-pellizco', {
         for (const inputSource of session.inputSources) {
             if (!inputSource.hand) continue;
 
-            const handedness = inputSource.handedness; // 'left' | 'right'
+            const handedness = inputSource.handedness;
             if (this.data.hand !== 'any' && handedness !== this.data.hand) continue;
 
             const thumbJoint = inputSource.hand.get('thumb-tip');
             const indexJoint = inputSource.hand.get('index-finger-tip');
-            if (!thumbJoint || !indexJoint) continue;
+            const wristJoint = inputSource.hand.get('wrist');
+            if (!thumbJoint || !indexJoint || !wristJoint) continue;
 
             const thumbPose = frame.getJointPose(thumbJoint, this.referenceSpace);
             const indexPose = frame.getJointPose(indexJoint, this.referenceSpace);
-            if (!thumbPose || !indexPose) continue;
+            const wristPose = frame.getJointPose(wristJoint, this.referenceSpace);
+            if (!thumbPose || !indexPose || !wristPose) continue;
 
+            // Distancia pellizco
             const dx = thumbPose.transform.position.x - indexPose.transform.position.x;
             const dy = thumbPose.transform.position.y - indexPose.transform.position.y;
             const dz = thumbPose.transform.position.z - indexPose.transform.position.z;
@@ -61,27 +101,49 @@ AFRAME.registerComponent('gesto-pellizco', {
             const handState = this.state[handedness];
             handState.lastDistance = distance;
 
+            // Actualizar OBB de la mano (centro = wrist, orientación = muñeca)
+            const wPos = wristPose.transform.position;
+            const wQuat = wristPose.transform.orientation;
+            handState.obb.center.set(wPos.x, wPos.y, wPos.z);
+            handState.obb.quaternion.set(wQuat.x, wQuat.y, wQuat.z, wQuat.w);
+
+            // Actualizar Box3 (AABB en mundo) para test rápido
+            const halfSize = handState.obb.size.clone().multiplyScalar(0.5);
+            handState.obb.box3.setFromCenterAndSize(handState.obb.center, handState.obb.size);
+
+            // Debug visual
+            if (handState.obb.debugBox) {
+                handState.obb.debugBox.object3D.position.copy(handState.obb.center);
+                handState.obb.debugBox.object3D.quaternion.copy(handState.obb.quaternion);
+            }
+
+            // Detección de pellizco
             if (!handState.pinching && distance <= this.data.startDistance) {
                 handState.pinching = true;
-                this._emit('pinchstart', handedness, distance);
+                this._emit('pinchstart', handedness, distance, handState.obb);
             } else if (handState.pinching && distance >= this.data.endDistance) {
                 handState.pinching = false;
-                this._emit('pinchend', handedness, distance);
+                this._emit('pinchend', handedness, distance, handState.obb);
             } else if (handState.pinching && this.data.emitEachFrame) {
-                this._emit('pinchmove', handedness, distance);
+                this._emit('pinchmove', handedness, distance, handState.obb);
             }
         }
     },
 
-    _emit: function (type, hand, distance) {
+    _emit: function (type, hand, distance, obb) {
         if (this.data.log) {
-            console.log(`[gesto-pellizco] ${type} mano=${hand} dist=${distance.toFixed(4)} m`);
+            console.log(`[gesto-pellizco] ${type} mano=${hand} dist=${distance.toFixed(4)}m`);
         }
-        this.el.emit(type, { hand, distance }, false);
+        this.el.emit(type, { hand, distance, obb }, false);
+    },
+
+    // API pública: obtener OBB de una mano
+    getHandOBB: function(handedness) {
+        return this.state[handedness] ? this.state[handedness].obb : null;
     }
 });
 
-// Listeners globales + mensaje visual (sin JS en el HTML)
+// Listeners globales (mensaje visual)
 document.addEventListener('DOMContentLoaded', () => {
     const detector = document.getElementById('detector');
     const msg = document.getElementById('pinchMessage');
@@ -97,31 +159,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (autoHideMs && autoHideMs > 0) {
             hideTimeout = setTimeout(() => {
-                msg.setAttribute('value', 'Haz un pellizco (pulgar + índice)');
+                msg.setAttribute('value', 'Haz un pellizco cerca del objeto');
                 msg.setAttribute('color', '#AAAAFF');
             }, autoHideMs);
         }
     }
 
-    if (!detector) {
-        console.warn('[gesto-pellizco] No se encontró #detector en DOM.');
-        return;
-    }
+    if (!detector) return;
 
     detector.addEventListener('pinchstart', e => {
         console.log('[PINCH] start', e.detail);
-        // Mensaje persistente mientras se mantiene el pellizco.
         setMessage(`PINCH START (${e.detail.hand})`, '#00FF66', null);
     });
 
     detector.addEventListener('pinchend', e => {
         console.log('[PINCH] end', e.detail);
-        // Tras soltar, vuelve al mensaje base después de 1.2s.
         setMessage(`PINCH END (${e.detail.hand})`, '#FF5555', 1200);
-    });
-
-    detector.addEventListener('pinchmove', e => {
-        // Si activas emitEachFrame:true en el HTML, puedes mostrar distancia viva:
-        // setMessage(`PINCH ${e.detail.hand} ${e.detail.distance.toFixed(3)}m`, '#FFFF66', null);
     });
 });
