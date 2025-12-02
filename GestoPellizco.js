@@ -11,7 +11,7 @@ AFRAME.registerComponent('gesto-pellizco', {
         emitEachFrame: {type: 'boolean', default: false},
         log: {type: 'boolean', default: false},
         // Tamaño del colisionador OBB de la mano (caja fija, no ajustada a forma real)
-        colliderSize: {type: 'vec3', default: {x: 0.15, y: 0.15, z: 0.15}},
+        colliderSize: {type: 'vec3', default: {x: 0.12, y: 0.08, z: 0.18}},
         debugCollider: {type: 'boolean', default: false}
     },
 
@@ -39,7 +39,7 @@ AFRAME.registerComponent('gesto-pellizco', {
                 ),
                 quaternion: new THREE.Quaternion(),
                 matrix: new THREE.Matrix4(),
-                box3: new THREE.Box3()  // ← AÑADIDO: faltaba esto
+                box3: new THREE.Box3() 
             };
 
             // Debug visual opcional
