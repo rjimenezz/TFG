@@ -1,9 +1,3 @@
-/**
- * Componente: pinch-move
- * Permite mover objetos con pellizco SOLO si hay contacto entre colisionadores OBB.
- * Usa SAT (Separating Axis Theorem) para colisión OBB real.
- * Solo traslación (sin rotación).
- */
 AFRAME.registerComponent('pinch-move', {
   schema: {
     hand: { type: 'string', default: 'any' },
@@ -20,6 +14,9 @@ AFRAME.registerComponent('pinch-move', {
       return;
     }
 
+    this.colliderType = this.detector.components['gesto-pellizco'].data.colliderType;
+    console.log(`[pinch-move] Usando colisionador: ${this.colliderType}`);
+
     this.isPinching = { left: false, right: false };
     this.inContact = { left: false, right: false };
     
@@ -30,33 +27,29 @@ AFRAME.registerComponent('pinch-move', {
     this.tmpWorldPos = new THREE.Vector3();
     this.tmpTarget = new THREE.Vector3();
 
-    // OBB del objeto
-    this.obb = {
-      center: new THREE.Vector3(),
-      size: new THREE.Vector3(
-        this.data.colliderSize.x,
-        this.data.colliderSize.y,
-        this.data.colliderSize.z
-      ),
-      halfSize: new THREE.Vector3(
-        this.data.colliderSize.x / 2,
-        this.data.colliderSize.y / 2,
-        this.data.colliderSize.z / 2
-      ),
-      quaternion: new THREE.Quaternion(),
-      matrix: new THREE.Matrix4()
-    };
-
-    // Debug visual
-    if (this.data.debug) {
-      this._debugBox = document.createElement('a-box');
-      this._debugBox.setAttribute('width', this.data.colliderSize.x);
-      this._debugBox.setAttribute('height', this.data.colliderSize.y);
-      this._debugBox.setAttribute('depth', this.data.colliderSize.z);
-      this._debugBox.setAttribute('color', '#0f0');
-      this._debugBox.setAttribute('opacity', 0.25);
-      this._debugBox.setAttribute('wireframe', true);
-      this.el.appendChild(this._debugBox);
+    // Crear colisionador del objeto
+    if (this.colliderType === 'obb-collider') {
+      this.el.setAttribute('obb-collider', `size: ${this.data.colliderSize.x} ${this.data.colliderSize.y} ${this.data.colliderSize.z}`);
+      
+      // Debug manual
+      if (this.data.debug) {
+        const debugBox = document.createElement('a-box');
+        debugBox.setAttribute('width', this.data.colliderSize.x);
+        debugBox.setAttribute('height', this.data.colliderSize.y);
+        debugBox.setAttribute('depth', this.data.colliderSize.z);
+        debugBox.setAttribute('color', '#00f');
+        debugBox.setAttribute('opacity', 0.25);
+        debugBox.setAttribute('wireframe', true);
+        this.el.appendChild(debugBox);
+        this.debugBox = debugBox;
+      }
+      
+      // Escuchar eventos de obb-collider
+      this.el.addEventListener('obbcollisionstarted', this._onOBBCollisionStart.bind(this));
+      this.el.addEventListener('obbcollisionended', this._onOBBCollisionEnd.bind(this));
+    } else {
+      const colliderConfig = `size: ${this.data.colliderSize.x} ${this.data.colliderSize.y} ${this.data.colliderSize.z}; debug: ${this.data.debug}`;
+      this.el.setAttribute('sat-collider', colliderConfig);
     }
 
     this._onPinchStart = this._onPinchStart.bind(this);
@@ -74,30 +67,51 @@ AFRAME.registerComponent('pinch-move', {
       this.detector.removeEventListener('pinchmove', this._onPinchMove);
       this.detector.removeEventListener('pinchend', this._onPinchEnd);
     }
-    if (this._debugBox) this._debugBox.remove();
+    this.el.removeAttribute(this.colliderType);
+    if (this.debugBox) this.debugBox.remove();
+  },
+
+  _onOBBCollisionStart: function(e) {
+    const collidedWith = e.detail.withEl;
+    if (collidedWith.id.startsWith('hand-collider-')) {
+      const hand = collidedWith.id.includes('left') ? 'left' : 'right';
+      this.inContact[hand] = true;
+      console.log(`[CONTACTO-OBB-COLLIDER] 🟢 Mano ${hand} TOCANDO objeto ${this.el.id || 'sin-id'}`);
+    }
+  },
+
+  _onOBBCollisionEnd: function(e) {
+    const collidedWith = e.detail.withEl;
+    if (collidedWith.id.startsWith('hand-collider-')) {
+      const hand = collidedWith.id.includes('left') ? 'left' : 'right';
+      this.inContact[hand] = false;
+      console.log(`[CONTACTO-OBB-COLLIDER] 🔴 Mano ${hand} DEJÓ DE TOCAR objeto ${this.el.id || 'sin-id'}`);
+    }
   },
 
   tick: function () {
-    // Actualizar OBB del objeto
-    this.el.object3D.getWorldPosition(this.obb.center);
-    this.el.object3D.getWorldQuaternion(this.obb.quaternion);
-    this.obb.matrix.compose(this.obb.center, this.obb.quaternion, new THREE.Vector3(1,1,1));
-
-    // Comprobar contacto con cada mano usando SAT
     const gestoComp = this.detector.components['gesto-pellizco'];
-    if (gestoComp) {
+    if (!gestoComp) return;
+
+    // Solo hacer detección manual si es sat-collider
+    if (this.colliderType === 'sat-collider') {
+      const objectCollider = this.el.components['sat-collider'];
+      if (!objectCollider) return;
+
       ['left', 'right'].forEach(h => {
-        const handOBB = gestoComp.getHandOBB(h);
-        if (handOBB) {
+        const handCollider = gestoComp.getHandCollider(h);
+        
+        if (handCollider) {
           const wasInContact = this.inContact[h];
-          this.inContact[h] = this._testOBBCollisionSAT(handOBB, this.obb);
+          const handOBB = handCollider.getOBB();
+          const objectOBB = objectCollider.getOBB();
+          this.inContact[h] = handCollider.testCollision(objectOBB);
           
-          // LOG: solo cambios de contacto
           if (this.inContact[h] && !wasInContact) {
-            console.log(`[CONTACTO] 🟢 Mano ${h} TOCANDO objeto ${this.el.id || 'sin-id'}`);
+            console.log(`[CONTACTO-SAT-COLLIDER] 🟢 Mano ${h} TOCANDO objeto ${this.el.id || 'sin-id'}`);
             this.el.emit('hand-contact-start', { hand: h }, false);
           } else if (!this.inContact[h] && wasInContact) {
-            console.log(`[CONTACTO] 🔴 Mano ${h} DEJÓ DE TOCAR objeto ${this.el.id || 'sin-id'}`);
+            console.log(`[CONTACTO-SAT-COLLIDER] 🔴 Mano ${h} DEJÓ DE TOCAR objeto ${this.el.id || 'sin-id'}`);
             this.el.emit('hand-contact-end', { hand: h }, false);
           }
         } else {
@@ -105,8 +119,8 @@ AFRAME.registerComponent('pinch-move', {
         }
       });
     }
+    // Para obb-collider, los eventos lo manejan automáticamente
 
-    // Si está agarrado pero ya no hay contacto O no hay pellizco -> soltar
     if (this.grabbing) {
       if (!this.inContact[this.grabHand] || !this.isPinching[this.grabHand]) {
         this._releaseGrab();
@@ -114,16 +128,11 @@ AFRAME.registerComponent('pinch-move', {
     }
 
     // Debug visual
-    if (this._debugBox) {
-      this._debugBox.object3D.position.set(0, 0, 0);
-      this._debugBox.object3D.quaternion.set(0, 0, 0, 1);
-      
-      if (this.grabbing) {
-        this._debugBox.setAttribute('color', '#f00');
-      } else if (this.inContact.left || this.inContact.right) {
-        this._debugBox.setAttribute('color', '#ff0');
-      } else {
-        this._debugBox.setAttribute('color', '#0f0');
+    if (this.data.debug) {
+      const debugEl = this.colliderType === 'obb-collider' ? this.debugBox : this.el.components['sat-collider']?._debugBox;
+      if (debugEl) {
+        const color = this.grabbing ? '#f00' : (this.inContact.left || this.inContact.right) ? '#ff0' : (this.colliderType === 'sat-collider' ? '#0f0' : '#00f');
+        debugEl.setAttribute('color', color);
       }
     }
   },
@@ -132,79 +141,14 @@ AFRAME.registerComponent('pinch-move', {
     return this.data.hand === 'any' || this.data.hand === hand;
   },
 
-  // Test de colisión OBB-OBB usando Separating Axis Theorem (SAT)
-  _testOBBCollisionSAT: function (obb1, obb2) {
-    // Extraer ejes de cada OBB
-    const axes1 = this._getOBBAxes(obb1.quaternion);
-    const axes2 = this._getOBBAxes(obb2.quaternion);
-    
-    // Vector entre centros
-    const T = new THREE.Vector3().subVectors(obb2.center, obb1.center);
-    
-    // Testear los 15 ejes potenciales de separación:
-    // 3 ejes de obb1, 3 ejes de obb2, 9 productos cruz
-    const testAxes = [
-      ...axes1,
-      ...axes2,
-      ...this._getCrossAxes(axes1, axes2)
-    ];
-    
-    for (const axis of testAxes) {
-      if (axis.lengthSq() < 1e-6) continue; // Skip ejes degenerados
-      
-      const L = axis.clone().normalize();
-      
-      // Proyectar radios de ambos OBBs sobre el eje
-      const r1 = this._projectOBBRadius(obb1, axes1, L);
-      const r2 = this._projectOBBRadius(obb2, axes2, L);
-      
-      // Proyectar distancia entre centros
-      const distance = Math.abs(T.dot(L));
-      
-      // Si hay separación en este eje -> no colisionan
-      if (distance > r1 + r2) {
-        return false;
-      }
-    }
-    
-    // No se encontró eje de separación -> colisionan
-    return true;
-  },
-
-  _getOBBAxes: function (quaternion) {
-    const m = new THREE.Matrix4().makeRotationFromQuaternion(quaternion);
-    return [
-      new THREE.Vector3(m.elements[0], m.elements[1], m.elements[2]),  // X
-      new THREE.Vector3(m.elements[4], m.elements[5], m.elements[6]),  // Y
-      new THREE.Vector3(m.elements[8], m.elements[9], m.elements[10])  // Z
-    ];
-  },
-
-  _getCrossAxes: function (axes1, axes2) {
-    const crosses = [];
-    for (const a1 of axes1) {
-      for (const a2 of axes2) {
-        crosses.push(new THREE.Vector3().crossVectors(a1, a2));
-      }
-    }
-    return crosses;
-  },
-
-  _projectOBBRadius: function (obb, axes, L) {
-    return Math.abs(obb.halfSize.x * axes[0].dot(L)) +
-           Math.abs(obb.halfSize.y * axes[1].dot(L)) +
-           Math.abs(obb.halfSize.z * axes[2].dot(L));
-  },
-
   _onPinchStart: function (e) {
     const hand = e.detail && e.detail.hand;
     if (!hand || !this._matchHand(hand)) return;
 
     this.isPinching[hand] = true;
 
-    // Solo agarrar si hay contacto previo
     if (!this.grabbing && this.inContact[hand]) {
-      this._startGrab(hand, e.detail.obb);
+      this._startGrab(hand);
     }
   },
 
@@ -212,16 +156,16 @@ AFRAME.registerComponent('pinch-move', {
     const hand = e.detail && e.detail.hand;
     if (!hand || !this._matchHand(hand)) return;
 
-    // Intentar agarrar si se cumplen condiciones
     if (!this.grabbing && this.isPinching[hand] && this.inContact[hand]) {
-      this._startGrab(hand, e.detail.obb);
+      this._startGrab(hand);
     }
 
-    // Actualizar posición si está agarrado
     if (this.grabbing && hand === this.grabHand) {
-      const handOBB = e.detail.obb;
-      if (!handOBB) return;
+      const gestoComp = this.detector.components['gesto-pellizco'];
+      const handCollider = gestoComp.getHandCollider(hand);
+      if (!handCollider) return;
 
+      const handOBB = handCollider.getOBB();
       this.tmpTarget.copy(handOBB.center).add(this.grabOffset);
       const parent = this.el.object3D.parent;
       if (parent) parent.worldToLocal(this.tmpTarget);
@@ -240,12 +184,15 @@ AFRAME.registerComponent('pinch-move', {
     }
   },
 
-  _startGrab: function (hand, handOBB) {
-    if (!handOBB) return;
+  _startGrab: function (hand) {
+    const gestoComp = this.detector.components['gesto-pellizco'];
+    const handCollider = gestoComp.getHandCollider(hand);
+    if (!handCollider) return;
 
     this.grabbing = true;
     this.grabHand = hand;
 
+    const handOBB = handCollider.getOBB();
     this.el.object3D.getWorldPosition(this.tmpWorldPos);
     this.grabOffset.copy(this.tmpWorldPos).sub(handOBB.center);
 

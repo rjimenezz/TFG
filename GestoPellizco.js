@@ -10,56 +10,68 @@ AFRAME.registerComponent('gesto-pellizco', {
         endDistance: {type: 'number', default: 0.035},
         emitEachFrame: {type: 'boolean', default: false},
         log: {type: 'boolean', default: false},
-        // Tamaño del colisionador OBB de la mano (caja fija, no ajustada a forma real)
         colliderSize: {type: 'vec3', default: {x: 0.12, y: 0.08, z: 0.18}},
-        debugCollider: {type: 'boolean', default: false}
+        debugCollider: {type: 'boolean', default: false},
+        colliderType: {type: 'string', default: 'sat-collider', oneOf: ['obb-collider', 'sat-collider']}
     },
 
-        init: function () {
+    init: function () {
         this.renderer = null;
         this.referenceSpace = null;
         this.state = {
-            left:  { pinching: false, lastDistance: null, obb: null },
-            right: { pinching: false, lastDistance: null, obb: null }
+            left:  { pinching: false, lastDistance: null, colliderEntity: null },
+            right: { pinching: false, lastDistance: null, colliderEntity: null }
         };
 
         ['left', 'right'].forEach(h => {
             const handState = this.state[h];
-            handState.obb = {
-                center: new THREE.Vector3(),
-                size: new THREE.Vector3(
-                    this.data.colliderSize.x,
-                    this.data.colliderSize.y,
-                    this.data.colliderSize.z
-                ),
-                halfSize: new THREE.Vector3(
-                    this.data.colliderSize.x / 2,
-                    this.data.colliderSize.y / 2,
-                    this.data.colliderSize.z / 2
-                ),
-                quaternion: new THREE.Quaternion(),
-                matrix: new THREE.Matrix4(),
-                box3: new THREE.Box3() 
-            };
-
-            // Debug visual opcional
-            if (this.data.debugCollider) {
-                const debugBox = document.createElement('a-box');
-                debugBox.setAttribute('width', this.data.colliderSize.x);
-                debugBox.setAttribute('height', this.data.colliderSize.y);
-                debugBox.setAttribute('depth', this.data.colliderSize.z);
-                debugBox.setAttribute('color', h === 'left' ? '#0af' : '#fa0');
-                debugBox.setAttribute('opacity', 0.2);
-                debugBox.setAttribute('wireframe', true);
-                this.el.sceneEl.appendChild(debugBox);
-                handState.obb.debugBox = debugBox;
+            const colliderEntity = document.createElement('a-entity');
+            colliderEntity.setAttribute('id', `hand-collider-${h}`);
+            
+            if (this.data.colliderType === 'obb-collider') {
+                // Usar obb-collider nativo
+                colliderEntity.setAttribute('obb-collider', `size: ${this.data.colliderSize.x} ${this.data.colliderSize.y} ${this.data.colliderSize.z}`);
+                
+                if (this.data.debugCollider) {
+                    const debugBox = document.createElement('a-box');
+                    debugBox.setAttribute('width', this.data.colliderSize.x);
+                    debugBox.setAttribute('height', this.data.colliderSize.y);
+                    debugBox.setAttribute('depth', this.data.colliderSize.z);
+                    debugBox.setAttribute('color', h === 'left' ? '#00f' : '#f80');
+                    debugBox.setAttribute('opacity', 0.25);
+                    debugBox.setAttribute('wireframe', true);
+                    colliderEntity.appendChild(debugBox);
+                    handState.debugBox = debugBox;
+                }
+            } else {
+                // Usar sat-collider (SIN el parámetro type, siempre SAT puro)
+                const colliderConfig = `size: ${this.data.colliderSize.x} ${this.data.colliderSize.y} ${this.data.colliderSize.z}; debug: ${this.data.debugCollider}`;
+                colliderEntity.setAttribute('sat-collider', colliderConfig);
+                
+                if (this.data.debugCollider) {
+                    colliderEntity.addEventListener('componentinitialized', (evt) => {
+                        if (evt.detail.name === 'sat-collider') {
+                            const comp = colliderEntity.components['sat-collider'];
+                            if (comp._debugBox) {
+                                comp._debugBox.setAttribute('color', h === 'left' ? '#0af' : '#fa0');
+                            }
+                        }
+                    });
+                }
             }
+            
+            this.el.sceneEl.appendChild(colliderEntity);
+            handState.colliderEntity = colliderEntity;
         });
+
+        console.log(`[gesto-pellizco] Usando colisionador: ${this.data.colliderType}`);
     },
+
     remove: function () {
         ['left', 'right'].forEach(h => {
-            if (this.state[h].obb.debugBox) {
-                this.state[h].obb.debugBox.remove();
+            const handState = this.state[h];
+            if (handState.colliderEntity) {
+                handState.colliderEntity.remove();
             }
         });
     },
@@ -100,7 +112,6 @@ AFRAME.registerComponent('gesto-pellizco', {
             
             if (!thumbPose || !indexPose || !wristPose || !middleTipPose) continue;
 
-            // Distancia pellizco
             const dx = thumbPose.transform.position.x - indexPose.transform.position.x;
             const dy = thumbPose.transform.position.y - indexPose.transform.position.y;
             const dz = thumbPose.transform.position.z - indexPose.transform.position.z;
@@ -109,56 +120,76 @@ AFRAME.registerComponent('gesto-pellizco', {
             const handState = this.state[handedness];
             handState.lastDistance = distance;
 
-            // Centro del colisionador: punto medio entre muñeca y punta del dedo medio
             const wPos = wristPose.transform.position;
             const mPos = middleTipPose.transform.position;
-            handState.obb.center.set(
-                (wPos.x + mPos.x) / 2,
-                (wPos.y + mPos.y) / 2,
-                (wPos.z + mPos.z) / 2
-            );
-            
-           
-            // Rotación del colisionador: usar la orientación de la muñeca
+            const centerX = (wPos.x + mPos.x) / 2;
+            const centerY = (wPos.y + mPos.y) / 2;
+            const centerZ = (wPos.z + mPos.z) / 2;
+
             const wQuat = wristPose.transform.orientation;
-            handState.obb.quaternion.set(wQuat.x, wQuat.y, wQuat.z, wQuat.w);
 
-            // Actualizar Box3 con tamaño FIJO de colliderSize
-            handState.obb.box3.setFromCenterAndSize(handState.obb.center, handState.obb.size);
-
-            // Debug visual
-            if (handState.obb.debugBox) {
-                handState.obb.debugBox.object3D.position.copy(handState.obb.center);
-                handState.obb.debugBox.object3D.quaternion.copy(handState.obb.quaternion);
+            if (handState.colliderEntity) {
+                handState.colliderEntity.object3D.position.set(centerX, centerY, centerZ);
+                handState.colliderEntity.object3D.quaternion.set(wQuat.x, wQuat.y, wQuat.z, wQuat.w);
             }
 
-            // Detección de pellizco
             if (!handState.pinching && distance <= this.data.startDistance) {
                 handState.pinching = true;
-                this._emit('pinchstart', handedness, distance, handState.obb);
+                this._emit('pinchstart', handedness, distance);
             } else if (handState.pinching && distance >= this.data.endDistance) {
                 handState.pinching = false;
-                this._emit('pinchend', handedness, distance, handState.obb);
+                this._emit('pinchend', handedness, distance);
             } else if (handState.pinching && this.data.emitEachFrame) {
-                this._emit('pinchmove', handedness, distance, handState.obb);
+                this._emit('pinchmove', handedness, distance);
             }
         }
     },
 
-    _emit: function (type, hand, distance, obb) {
+    _emit: function (type, hand, distance) {
         if (this.data.log) {
             console.log(`[gesto-pellizco] ${type} mano=${hand} dist=${distance.toFixed(4)}m`);
         }
-        this.el.emit(type, { hand, distance, obb }, false);
+        this.el.emit(type, { hand, distance }, false);
     },
 
-    // API pública: obtener OBB de una mano
+    getHandCollider: function(handedness) {
+        const handState = this.state[handedness];
+        if (!handState || !handState.colliderEntity) return null;
+        
+        if (this.data.colliderType === 'obb-collider') {
+            // Wrapper para obb-collider nativo
+            return {
+                el: handState.colliderEntity,
+                getOBB: () => {
+                    const pos = new THREE.Vector3();
+                    const quat = new THREE.Quaternion();
+                    handState.colliderEntity.object3D.getWorldPosition(pos);
+                    handState.colliderEntity.object3D.getWorldQuaternion(quat);
+                    
+                    return {
+                        center: pos,
+                        size: new THREE.Vector3(this.data.colliderSize.x, this.data.colliderSize.y, this.data.colliderSize.z),
+                        halfSize: new THREE.Vector3(
+                            this.data.colliderSize.x / 2,
+                            this.data.colliderSize.y / 2,
+                            this.data.colliderSize.z / 2
+                        ),
+                        quaternion: quat
+                    };
+                }
+            };
+        } else {
+            // sat-collider
+            return handState.colliderEntity.components['sat-collider'] || null;
+        }
+    },
+
     getHandOBB: function(handedness) {
-        return this.state[handedness] ? this.state[handedness].obb : null;
+        const collider = this.getHandCollider(handedness);
+        return collider ? collider.getOBB() : null;
     }
 });
 
-// Listeners globales (mensaje visual)
 document.addEventListener('DOMContentLoaded', () => {
     const detector = document.getElementById('detector');
     const msg = document.getElementById('pinchMessage');
@@ -183,12 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!detector) return;
 
     detector.addEventListener('pinchstart', e => {
-        //console.log('[PINCH] start', e.detail);
         setMessage(`PINCH START (${e.detail.hand})`, '#00FF66', null);
     });
 
     detector.addEventListener('pinchend', e => {
-        //console.log('[PINCH] end', e.detail);
         setMessage(`PINCH END (${e.detail.hand})`, '#FF5555', 1200);
     });
 });
