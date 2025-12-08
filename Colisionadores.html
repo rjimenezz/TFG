@@ -11,7 +11,7 @@
 </head>
 <body>
 <!-- CAMBIAR AQUÍ: 'obb-collider' (A-Frame nativo) o 'sat-collider' (SAT 15 ejes) -->
-<a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking" obb-collider="showColliders: true">
+<a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking" obb-collider="showColliders: false">
   <a-camera position="0 1.6 2"></a-camera>
 
   <a-entity id="detector"
@@ -19,8 +19,8 @@
                            startDistance:0.025; 
                            endDistance:0.035; 
                            emitEachFrame:true; 
-                           debugCollider:true;
-                           colliderType:obb-collider">
+                           debugCollider:false;
+                           colliderType:sat-collider">
   </a-entity>
 
   <a-entity manos-esferas="useJointRadius:true; 

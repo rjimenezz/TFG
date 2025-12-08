@@ -22,16 +22,18 @@ AFRAME.registerComponent('pinch-move', {
     
     this.grabbing = false;
     this.grabHand = null;
+    
+    // NUEVO: Guardar padre original y offset local
+    this.originalParent = null;
+    this.localOffset = new THREE.Vector3();
+    this.localRotation = new THREE.Quaternion();
 
-    this.grabOffset = new THREE.Vector3();
     this.tmpWorldPos = new THREE.Vector3();
-    this.tmpTarget = new THREE.Vector3();
 
     // Crear colisionador del objeto
     if (this.colliderType === 'obb-collider') {
       this.el.setAttribute('obb-collider', `size: ${this.data.colliderSize.x} ${this.data.colliderSize.y} ${this.data.colliderSize.z}`);
       
-      // Debug manual
       if (this.data.debug) {
         const debugBox = document.createElement('a-box');
         debugBox.setAttribute('width', this.data.colliderSize.x);
@@ -44,7 +46,6 @@ AFRAME.registerComponent('pinch-move', {
         this.debugBox = debugBox;
       }
       
-      // Escuchar eventos de obb-collider
       this.el.addEventListener('obbcollisionstarted', this._onOBBCollisionStart.bind(this));
       this.el.addEventListener('obbcollisionended', this._onOBBCollisionEnd.bind(this));
     } else {
@@ -119,7 +120,6 @@ AFRAME.registerComponent('pinch-move', {
         }
       });
     }
-    // Para obb-collider, los eventos lo manejan automáticamente
 
     if (this.grabbing) {
       if (!this.inContact[this.grabHand] || !this.isPinching[this.grabHand]) {
@@ -159,18 +159,6 @@ AFRAME.registerComponent('pinch-move', {
     if (!this.grabbing && this.isPinching[hand] && this.inContact[hand]) {
       this._startGrab(hand);
     }
-
-    if (this.grabbing && hand === this.grabHand) {
-      const gestoComp = this.detector.components['gesto-pellizco'];
-      const handCollider = gestoComp.getHandCollider(hand);
-      if (!handCollider) return;
-
-      const handOBB = handCollider.getOBB();
-      this.tmpTarget.copy(handOBB.center).add(this.grabOffset);
-      const parent = this.el.object3D.parent;
-      if (parent) parent.worldToLocal(this.tmpTarget);
-      this.el.object3D.position.copy(this.tmpTarget);
-    }
   },
 
   _onPinchEnd: function (e) {
@@ -192,11 +180,43 @@ AFRAME.registerComponent('pinch-move', {
     this.grabbing = true;
     this.grabHand = hand;
 
-    const handOBB = handCollider.getOBB();
-    this.el.object3D.getWorldPosition(this.tmpWorldPos);
-    this.grabOffset.copy(this.tmpWorldPos).sub(handOBB.center);
+    // Obtener el collider entity de la mano
+    const handColliderEl = gestoComp.state[hand].colliderEntity;
+    if (!handColliderEl) return;
+
+    // CLAVE: Guardar padre original
+    this.originalParent = this.el.object3D.parent;
+
+    // Calcular posición/rotación mundial del objeto ANTES de reparenting
+    const objWorldPos = new THREE.Vector3();
+    const objWorldQuat = new THREE.Quaternion();
+    const objWorldScale = new THREE.Vector3();
+    
+    this.el.object3D.getWorldPosition(objWorldPos);
+    this.el.object3D.getWorldQuaternion(objWorldQuat);
+    this.el.object3D.getWorldScale(objWorldScale);
+
+    // PARENTING: Hacer que el objeto sea hijo del collider de la mano
+    handColliderEl.object3D.add(this.el.object3D);
+
+    // Ahora convertir la posición/rotación mundial a coordenadas locales del nuevo padre
+    const handInverseMatrix = new THREE.Matrix4();
+    handInverseMatrix.copy(handColliderEl.object3D.matrixWorld).invert();
+    
+    // Aplicar la transformación inversa a la posición mundial
+    this.el.object3D.position.copy(objWorldPos).applyMatrix4(handInverseMatrix);
+    
+    // Calcular rotación local relativa a la mano
+    const handWorldQuat = new THREE.Quaternion();
+    handColliderEl.object3D.getWorldQuaternion(handWorldQuat);
+    const handInverseQuat = handWorldQuat.clone().invert();
+    this.el.object3D.quaternion.copy(handInverseQuat).multiply(objWorldQuat);
+    
+    // Mantener escala original
+    this.el.object3D.scale.copy(objWorldScale);
 
     console.log(`[AGARRE] 🎯 AGARRADO objeto ${this.el.id || 'sin-id'} con mano ${hand}`);
+    console.log(`  Pos local: ${this.el.object3D.position.x.toFixed(3)}, ${this.el.object3D.position.y.toFixed(3)}, ${this.el.object3D.position.z.toFixed(3)}`);
     this.el.emit('pinchmoverstart', { hand }, false);
     this.el.setAttribute('color', '#ff4444');
   },
@@ -205,10 +225,51 @@ AFRAME.registerComponent('pinch-move', {
     if (!this.grabbing) return;
 
     const hand = this.grabHand;
+    const gestoComp = this.detector.components['gesto-pellizco'];
+    const handColliderEl = gestoComp.state[hand]?.colliderEntity;
+
+    // Guardar transformación mundial ANTES de cambiar de padre
+    const worldPos = new THREE.Vector3();
+    const worldQuat = new THREE.Quaternion();
+    const worldScale = new THREE.Vector3();
+    
+    this.el.object3D.getWorldPosition(worldPos);
+    this.el.object3D.getWorldQuaternion(worldQuat);
+    this.el.object3D.getWorldScale(worldScale);
+
+    console.log(`[AGARRE] 🔓 SOLTANDO objeto ${this.el.id || 'sin-id'}`);
+    console.log(`  Pos mundial antes: ${worldPos.x.toFixed(3)}, ${worldPos.y.toFixed(3)}, ${worldPos.z.toFixed(3)}`);
+
+    // UNPARENTING: Devolver al padre original
+    if (this.originalParent) {
+      this.originalParent.add(this.el.object3D);
+    } else {
+      this.sceneEl.object3D.add(this.el.object3D);
+    }
+
+    // Convertir transformación mundial a coordenadas locales del nuevo padre
+    const parentInverseMatrix = new THREE.Matrix4();
+    const targetParent = this.originalParent || this.sceneEl.object3D;
+    parentInverseMatrix.copy(targetParent.matrixWorld).invert();
+    
+    // Aplicar transformación inversa
+    const localPos = worldPos.clone().applyMatrix4(parentInverseMatrix);
+    this.el.object3D.position.copy(localPos);
+    
+    // Para la rotación, calcular relativa al nuevo padre
+    const parentWorldQuat = new THREE.Quaternion();
+    targetParent.getWorldQuaternion(parentWorldQuat);
+    const parentInverseQuat = parentWorldQuat.clone().invert();
+    this.el.object3D.quaternion.copy(parentInverseQuat).multiply(worldQuat);
+    
+    // Restaurar escala
+    this.el.object3D.scale.copy(worldScale);
+
+    console.log(`  Pos local después: ${this.el.object3D.position.x.toFixed(3)}, ${this.el.object3D.position.y.toFixed(3)}, ${this.el.object3D.position.z.toFixed(3)}`);
+
     this.grabbing = false;
     this.grabHand = null;
     
-    console.log(`[AGARRE] 🔓 SOLTADO objeto ${this.el.id || 'sin-id'} (mano ${hand})`);
     this.el.emit('pinchmoverend', { hand }, false);
     this.el.setAttribute('color', '#4CAF50');
   }
