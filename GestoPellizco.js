@@ -29,9 +29,28 @@ AFRAME.registerComponent('gesto-pellizco', {
             colliderEntity.setAttribute('id', `hand-collider-${h}`);
             
             if (this.data.colliderType === 'obb-collider') {
-                // Usar obb-collider nativo
-                colliderEntity.setAttribute('obb-collider', `size: ${this.data.colliderSize.x} ${this.data.colliderSize.y} ${this.data.colliderSize.z}`);
+                // PRIMERO: Crear la geometría que define el tamaño
+                colliderEntity.setAttribute('geometry', {
+                    primitive: 'box',
+                    width: this.data.colliderSize.x,
+                    height: this.data.colliderSize.y,
+                    depth: this.data.colliderSize.z
+                });
                 
+                // SEGUNDO: Configurar obb-collider SIN el parámetro size
+                // (usa automáticamente el tamaño de la geometría)
+                colliderEntity.setAttribute('obb-collider', {
+                    trackedObject3D: 'mesh'
+                });
+                
+                // TERCERO: Hacer la geometría invisible
+                colliderEntity.setAttribute('material', { 
+                    visible: false,
+                    transparent: true,
+                    opacity: 0
+                });
+                
+                // Debug manual (este sí respeta el tamaño)
                 if (this.data.debugCollider) {
                     const debugBox = document.createElement('a-box');
                     debugBox.setAttribute('width', this.data.colliderSize.x);
@@ -40,6 +59,7 @@ AFRAME.registerComponent('gesto-pellizco', {
                     debugBox.setAttribute('color', h === 'left' ? '#00f' : '#f80');
                     debugBox.setAttribute('opacity', 0.25);
                     debugBox.setAttribute('wireframe', true);
+                    debugBox.setAttribute('material', 'transparent: true');
                     colliderEntity.appendChild(debugBox);
                     handState.debugBox = debugBox;
                 }
