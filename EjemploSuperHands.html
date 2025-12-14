@@ -42,9 +42,12 @@
     </a-entity>
     
     <!-- OBJETO IGUAL QUE SUPER-HANDS pero solo con grabbable -->
-    <a-box grabbable 
+    <a-box grabbable="invert:true;
+                    suppressY:false" 
            color="blue" 
-           position="0 1.6 -1">
+           position="0 1.6 -1"
+           
+           >
     </a-box>
   </a-scene>
 </body>

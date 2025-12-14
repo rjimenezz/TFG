@@ -5,7 +5,7 @@
  */
 AFRAME.registerComponent('grabbable', {
   schema: {
-    maxGrabbers: { type: 'int', default: NaN }, // ← CAMBIO: NaN = ilimitado (como super-hands)
+    maxGrabbers: { type: 'int', default: NaN },
     invert: { type: 'boolean', default: false },
     suppressY: { type: 'boolean', default: false },
     colliderSize: { type: 'vec3', default: {x: 0.3, y: 0.3, z: 0.3} },
@@ -15,7 +15,6 @@ AFRAME.registerComponent('grabbable', {
   init: function () {
     this.sceneEl = this.el.sceneEl;
     
-    // Esperar a que el detector esté listo
     if (this.sceneEl.hasLoaded) {
       this._setup();
     } else {
@@ -31,7 +30,6 @@ AFRAME.registerComponent('grabbable', {
       this._createDetector();
     }
 
-    // Obtener tipo de colisionador del detector
     const gestoComp = this.detector.components['gesto-pellizco'];
     this.colliderType = gestoComp ? gestoComp.data.colliderType : 'sat-collider';
 
@@ -40,10 +38,8 @@ AFRAME.registerComponent('grabbable', {
     this.inContact = { left: false, right: false };
     this.isPinching = { left: false, right: false };
 
-    // AUTO-AÑADIR colisionador si no existe
     this._ensureCollider();
 
-    // Escuchar eventos de pellizco
     this._onPinchStart = this._onPinchStart.bind(this);
     this._onPinchEnd = this._onPinchEnd.bind(this);
 
@@ -51,12 +47,9 @@ AFRAME.registerComponent('grabbable', {
     this.detector.addEventListener('pinchend', this._onPinchEnd);
 
     const maxGrabbersText = isNaN(this.data.maxGrabbers) ? 'ilimitado' : this.data.maxGrabbers;
-    console.log(`[grabbable] ✅ Inicializado en ${this.el.id || this.el.tagName} (${this.colliderType}, maxGrabbers: ${maxGrabbersText})`);
+    console.log(`[grabbable] ✅ Inicializado en ${this.el.id || this.el.tagName} (${this.colliderType}, maxGrabbers: ${maxGrabbersText}, invert: ${this.data.invert})`);
   },
 
-  /**
-   * Crear detector automáticamente si no existe (como super-hands)
-   */
   _createDetector: function () {
     console.log('[grabbable] Creando detector automático...');
     
@@ -74,7 +67,6 @@ AFRAME.registerComponent('grabbable', {
     this.sceneEl.appendChild(detector);
     this.detector = detector;
     
-    // Añadir manos visuales (opcional)
     const manos = document.createElement('a-entity');
     manos.setAttribute('manos-esferas', {
       useJointRadius: true,
@@ -101,12 +93,10 @@ AFRAME.registerComponent('grabbable', {
     const hasCollider = this.el.components['sat-collider'] || this.el.components['obb-collider'];
     
     if (!hasCollider) {
-      // Calcular tamaño del colisionador basado en la geometría del objeto
       let size = this.data.colliderSize;
       
       const geometry = this.el.getAttribute('geometry');
       if (geometry) {
-        // Adaptar tamaño según la geometría existente
         if (geometry.primitive === 'box') {
           size = {
             x: geometry.width || 1,
@@ -183,9 +173,42 @@ AFRAME.registerComponent('grabbable', {
       }
     }
 
+    // ← CORREGIDO: Aplicar invert continuamente
+    if (this.data.invert && this.grabbers.length > 0) {
+      const grabber = this.grabbers[0];
+      const handColliderEl = grabber.colliderEntity;
+      
+      // Posición actual de la mano
+      const handWorldPos = new THREE.Vector3();
+      handColliderEl.object3D.getWorldPosition(handWorldPos);
+      
+      // Calcular el offset desde la posición inicial de la mano
+      const handInitialPos = grabber.handInitialWorld; // Posición de la mano cuando se agarró
+      const handMovement = new THREE.Vector3().subVectors(handWorldPos, handInitialPos);
+      
+      // Aplicar movimiento invertido al objeto
+      const invertedTargetPos = grabber.grabCenterWorld.clone().sub(handMovement);
+      
+      // Convertir a coordenadas locales del padre (mano)
+      const parentInverseMatrix = new THREE.Matrix4();
+      parentInverseMatrix.copy(handColliderEl.object3D.matrixWorld).invert();
+      const localPos = invertedTargetPos.clone().applyMatrix4(parentInverseMatrix);
+      
+      this.el.object3D.position.copy(localPos);
+    }
+
     // Aplicar suppressY
     if (this.data.suppressY && this.originalY !== null && this.grabbers.length > 0) {
-      this.el.object3D.position.y = this.originalY;
+      const worldPos = new THREE.Vector3();
+      this.el.object3D.getWorldPosition(worldPos);
+      
+      worldPos.y = this.originalY;
+      
+      const parent = this.el.object3D.parent;
+      const parentInverseMatrix = new THREE.Matrix4();
+      parentInverseMatrix.copy(parent.matrixWorld).invert();
+      const localPos = worldPos.clone().applyMatrix4(parentInverseMatrix);
+      this.el.object3D.position.copy(localPos);
     }
   },
 
@@ -195,7 +218,6 @@ AFRAME.registerComponent('grabbable', {
 
     this.isPinching[hand] = true;
 
-    // ← CAMBIO: Solo verificar límite si maxGrabbers NO es NaN
     const hasLimit = !isNaN(this.data.maxGrabbers);
     const belowLimit = !hasLimit || this.grabbers.length < this.data.maxGrabbers;
 
@@ -224,7 +246,6 @@ AFRAME.registerComponent('grabbable', {
     const handColliderEl = gestoComp.state[hand].colliderEntity;
     if (!handColliderEl) return;
 
-    // ← CAMBIO: Solo aplicar límite si maxGrabbers NO es NaN
     if (!isNaN(this.data.maxGrabbers) && this.grabbers.length >= this.data.maxGrabbers) {
       const oldestGrabber = this.grabbers[0];
       console.log(`[grabbable] Máximo de agarres alcanzado (${this.data.maxGrabbers}), soltando mano ${oldestGrabber.hand}`);
@@ -241,8 +262,12 @@ AFRAME.registerComponent('grabbable', {
     this.el.object3D.getWorldQuaternion(objWorldQuat);
     this.el.object3D.getWorldScale(objWorldScale);
 
+    // ← CORREGIDO: Guardar posición INICIAL de la mano (no del objeto)
+    const handWorldPos = new THREE.Vector3();
+    handColliderEl.object3D.getWorldPosition(handWorldPos);
+
     if (this.data.suppressY && this.originalY === null) {
-      this.originalY = this.el.object3D.position.y;
+      this.originalY = objWorldPos.y;
     }
 
     handColliderEl.object3D.add(this.el.object3D);
@@ -270,12 +295,14 @@ AFRAME.registerComponent('grabbable', {
       colliderEntity: handColliderEl,
       originalParent: originalParent,
       localOffset: localPos.clone(),
-      localRotation: this.el.object3D.quaternion.clone()
+      localRotation: this.el.object3D.quaternion.clone(),
+      grabCenterWorld: objWorldPos.clone(),        // ← Posición del OBJETO cuando se agarró
+      handInitialWorld: handWorldPos.clone()       // ← Posición de la MANO cuando se agarró
     };
 
     this.grabbers.push(grabData);
 
-    console.log(`[grabbable] 🎯 AGARRADO por mano ${hand} (total agarres: ${this.grabbers.length})`);
+    console.log(`[grabbable] 🎯 AGARRADO por mano ${hand} (total agarres: ${this.grabbers.length}, invert: ${this.data.invert})`);
     this.el.emit('grab-start', { hand, grabbers: this.grabbers.length }, false);
   },
 
@@ -316,7 +343,6 @@ AFRAME.registerComponent('grabbable', {
 
       this.originalY = null;
     } else {
-      // Si hay más agarres, transferir a la próxima mano activa
       const nextGrabber = this.grabbers.find((g, i) => i !== grabberIndex);
       if (nextGrabber) {
         console.log(`[grabbable] Transferir agarre de ${hand} a ${nextGrabber.hand}`);
