@@ -87,6 +87,12 @@ AFRAME.registerComponent('grabbable', {
     while (this.grabbers.length > 0) {
       this._releaseGrab(this.grabbers[0].hand);
     }
+
+    // Por seguridad, quitar estado 'grabbed' al remover el componente
+    if (this.el.is('grabbed')) {
+      this.el.removeState('grabbed');
+      console.log(`[grabbable] ❌ Estado 'grabbed' eliminado (componente removido)`);
+    }
   },
 
   _ensureCollider: function () {
@@ -173,7 +179,7 @@ AFRAME.registerComponent('grabbable', {
       }
     }
 
-    // ← CORREGIDO: Aplicar invert continuamente
+    // Aplicar invert continuamente
     if (this.data.invert && this.grabbers.length > 0) {
       const grabber = this.grabbers[0];
       const handColliderEl = grabber.colliderEntity;
@@ -183,7 +189,7 @@ AFRAME.registerComponent('grabbable', {
       handColliderEl.object3D.getWorldPosition(handWorldPos);
       
       // Calcular el offset desde la posición inicial de la mano
-      const handInitialPos = grabber.handInitialWorld; // Posición de la mano cuando se agarró
+      const handInitialPos = grabber.handInitialWorld;
       const handMovement = new THREE.Vector3().subVectors(handWorldPos, handInitialPos);
       
       // Aplicar movimiento invertido al objeto
@@ -246,6 +252,9 @@ AFRAME.registerComponent('grabbable', {
     const handColliderEl = gestoComp.state[hand].colliderEntity;
     if (!handColliderEl) return;
 
+    // Verificar si estaba previamente sin agarrar (para añadir estado 'grabbed')
+    const wasGrabbed = this.grabbers.length > 0;
+
     if (!isNaN(this.data.maxGrabbers) && this.grabbers.length >= this.data.maxGrabbers) {
       const oldestGrabber = this.grabbers[0];
       console.log(`[grabbable] Máximo de agarres alcanzado (${this.data.maxGrabbers}), soltando mano ${oldestGrabber.hand}`);
@@ -262,7 +271,6 @@ AFRAME.registerComponent('grabbable', {
     this.el.object3D.getWorldQuaternion(objWorldQuat);
     this.el.object3D.getWorldScale(objWorldScale);
 
-    // ← CORREGIDO: Guardar posición INICIAL de la mano (no del objeto)
     const handWorldPos = new THREE.Vector3();
     handColliderEl.object3D.getWorldPosition(handWorldPos);
 
@@ -296,11 +304,17 @@ AFRAME.registerComponent('grabbable', {
       originalParent: originalParent,
       localOffset: localPos.clone(),
       localRotation: this.el.object3D.quaternion.clone(),
-      grabCenterWorld: objWorldPos.clone(),        // ← Posición del OBJETO cuando se agarró
-      handInitialWorld: handWorldPos.clone()       // ← Posición de la MANO cuando se agarró
+      grabCenterWorld: objWorldPos.clone(),
+      handInitialWorld: handWorldPos.clone()
     };
 
     this.grabbers.push(grabData);
+
+    // ✅ AÑADIR ESTADO 'grabbed' (estilo super-hands)
+    if (!wasGrabbed) {
+      this.el.addState('grabbed');
+      console.log(`[grabbable] 📦 Estado 'grabbed' AÑADIDO - Objeto siendo transportado`);
+    }
 
     console.log(`[grabbable] 🎯 AGARRADO por mano ${hand} (total agarres: ${this.grabbers.length}, invert: ${this.data.invert})`);
     this.el.emit('grab-start', { hand, grabbers: this.grabbers.length }, false);
@@ -366,6 +380,12 @@ AFRAME.registerComponent('grabbable', {
     }
 
     this.grabbers.splice(grabberIndex, 1);
+
+    // ✅ QUITAR ESTADO 'grabbed' cuando ya no hay ningún agarre
+    if (this.grabbers.length === 0) {
+      this.el.removeState('grabbed');
+      console.log(`[grabbable] 📭 Estado 'grabbed' ELIMINADO - Objeto ya no está siendo transportado`);
+    }
 
     console.log(`[grabbable] 🔓 SOLTADO por mano ${hand} (agarres restantes: ${this.grabbers.length})`);
     this.el.emit('grab-end', { hand, grabbers: this.grabbers.length }, false);
