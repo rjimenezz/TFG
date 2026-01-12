@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8">
   <title>Apuntar + Manos (Esferas)</title>
@@ -8,35 +9,34 @@
   <script src="GestoApuntar.js"></script>
   <script src="ManosEsferas.js"></script>
 </head>
-<body>
-<a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking">
-  <a-camera position="0 1.6 2"></a-camera>
 
-  <!-- Detector de gesto apuntar (sin visuales propios) -->
-  <a-entity id="detector"
-            gesto-apuntar="hand:any; 
-                          indexExtendedThreshold:0.10; 
-                          otherFingersThreshold:0.06;
-                          releaseThreshold:0.08;
+<body>
+  <a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking">
+    <a-camera position="0 1.6 2"></a-camera>
+
+    <!-- Detector de gesto apuntar con DEBUG activado -->
+    <a-entity id="detector" gesto-apuntar="hand:any; 
+                          indexExtendedThreshold:0.06; 
+                          otherFingersThreshold:0.08;
+                          releaseThreshold:0.10;
                           emitEachFrame:false; 
-                          log:true; 
+                          log:true;
+                          debugDistances:true;
                           debugCollider:true;
                           colliderType:sat-collider">
-  </a-entity>
+    </a-entity>
 
-  <!-- Visualización de TODAS las articulaciones como esferas -->
-  <a-entity manos-esferas="useJointRadius:true; colorLeft:#39f; colorRight:#f93; opacity:0.9; labels:false"></a-entity>
+    <!-- Visualización de TODAS las articulaciones como esferas -->
+    <a-entity
+      manos-esferas="useJointRadius:true; colorLeft:#39f; colorRight:#f93; opacity:0.9; labels:false"></a-entity>
 
-  <!-- Mensaje visual para feedback del gesto -->
-  <a-text id="pointMessage"
-          position="0 1.9 -1.2"
-          align="center"
-          width="2.5"
-          color="#AAAAFF"
-          value="Apunta con el dedo índice (otros dedos cerrados)">
-  </a-text>
+    <!-- Mensaje visual para feedback del gesto -->
+    <a-text id="pointMessage" position="0 1.9 -1.2" align="center" width="2.5" color="#AAAAFF"
+      value="Apunta con el dedo índice (otros dedos cerrados)">
+    </a-text>
 
-  <a-sky color="#02111f"></a-sky>
-</a-scene>
+    <a-sky color="#02111f"></a-sky>
+  </a-scene>
 </body>
+
 </html>
