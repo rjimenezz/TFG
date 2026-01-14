@@ -1,15 +1,17 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-  <title>Most Basic Super-Hands Example (Mi Sistema)</title>
+  <title>Grabbable con Pellizco y Apuntar</title>
   <meta charset="utf-8">
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-  
-   <script>
+
+  <script>
     delete AFRAME.components["grabbable"];
   </script>
   <script src="sat-collider.js"></script>
   <script src="GestoPellizco.js"></script>
+  <script src="GestoApuntar.js"></script>
   <script src="ManosEsferas.js"></script>
   <script src="Grabbable.js"></script>
 </head>
@@ -17,20 +19,31 @@
 <body>
   <a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking">
     <a-assets></a-assets>
-    
+
     <a-entity>
       <a-camera position="0 1.6 0"></a-camera>
-      
-      <a-entity id="detector"
-                gesto-pellizco="hand:any; 
+
+      <!-- Detector de pellizco -->
+      <a-entity id="detector-pellizco" gesto-pellizco="hand:any; 
                                startDistance:0.025; 
                                endDistance:0.035; 
                                emitEachFrame:true; 
                                debugCollider:false;
                                colliderType:sat-collider">
       </a-entity>
-      
-      <!-- Visualizar manos (opcional) -->
+
+      <!-- Detector de apuntar -->
+      <a-entity id="detector-apuntar" gesto-apuntar="hand:any; 
+                              indexExtendedThreshold:0.06; 
+                              otherFingersThreshold:0.08;
+                              releaseThreshold:0.10;
+                              pinchCancelThreshold:0.04;
+                              emitEachFrame:true; 
+                              debugCollider:false;
+                              colliderType:sat-collider">
+      </a-entity>
+
+      <!-- Visualizar manos -->
       <a-entity manos-esferas="useJointRadius:true; 
                                colorLeft:#39f; 
                                colorRight:#f93; 
@@ -38,14 +51,24 @@
                                labels:false">
       </a-entity>
     </a-entity>
-    
-    <a-box grabbable="invert:false;
-                    suppressY:false" 
-           color="blue" 
-           position="0 1.6 -1"
-           
-           >
+
+    <!-- Cubo AZUL: se agarra con PELLIZCO -->
+    <a-box grabbable="startGesture:pinchstart; 
+                      endGesture:pinchend;
+                      invert:false;
+                      suppressY:false" color="blue" position="-0.5 1.6 -1">
     </a-box>
+
+    <!-- Cubo VERDE: se agarra con APUNTAR -->
+    <a-box grabbable="startGesture:pointstart; 
+                      endGesture:pointend;
+                      invert:false;
+                      suppressY:false" color="green" position="0.5 1.6 -1">
+    </a-box>
+
+    <!-- Suelo -->
+    <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10" color="#7BC8A4"></a-plane>
   </a-scene>
 </body>
+
 </html>

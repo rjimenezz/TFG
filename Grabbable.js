@@ -1,6 +1,6 @@
 /**
  * Componente: grabbable
- * Hace que un objeto pueda ser agarrado con pellizco.
+ * Hace que un objeto pueda ser agarrado con diferentes gestos de mano.
  * Compatible con super-hands: solo añadir 'grabbable' al objeto.
  */
 AFRAME.registerComponent('grabbable', {
@@ -8,13 +8,16 @@ AFRAME.registerComponent('grabbable', {
     maxGrabbers: { type: 'int', default: NaN },
     invert: { type: 'boolean', default: false },
     suppressY: { type: 'boolean', default: false },
-    colliderSize: { type: 'vec3', default: {x: 0.3, y: 0.3, z: 0.3} },
-    debug: { type: 'boolean', default: false }
+    colliderSize: { type: 'vec3', default: { x: 0.3, y: 0.3, z: 0.3 } },
+    debug: { type: 'boolean', default: false },
+    // ✅ NUEVO: Elegir qué gesto usar
+    startGesture: { type: 'string', default: 'pinchstart' },  // 'pinchstart' o 'pointstart'
+    endGesture: { type: 'string', default: 'pinchend' }       // 'pinchend' o 'pointend'
   },
 
   init: function () {
     this.sceneEl = this.el.sceneEl;
-    
+
     if (this.sceneEl.hasLoaded) {
       this._setup();
     } else {
@@ -23,36 +26,83 @@ AFRAME.registerComponent('grabbable', {
   },
 
   _setup: function () {
-    this.detector = document.getElementById('detector');
-    
-    if (!this.detector || !this.detector.components['gesto-pellizco']) {
-      console.warn('[grabbable] Falta #detector con gesto-pellizco. Creando detector automático...');
+    // ✅ Buscar detector según el gesto configurado
+    this.detector = this._findDetector();
+
+    if (!this.detector) {
+      console.warn('[grabbable] No se encontró detector compatible. Creando detector automático con gesto-pellizco...');
       this._createDetector();
     }
 
-    const gestoComp = this.detector.components['gesto-pellizco'];
-    this.colliderType = gestoComp ? gestoComp.data.colliderType : 'sat-collider';
+    this.colliderType = this._detectColliderType();
 
     this.grabbers = [];
     this.originalY = null;
     this.inContact = { left: false, right: false };
-    this.isPinching = { left: false, right: false };
+    this.isGesturing = { left: false, right: false };
 
     this._ensureCollider();
 
-    this._onPinchStart = this._onPinchStart.bind(this);
-    this._onPinchEnd = this._onPinchEnd.bind(this);
+    this._onGestureStart = this._onGestureStart.bind(this);
+    this._onGestureEnd = this._onGestureEnd.bind(this);
 
-    this.detector.addEventListener('pinchstart', this._onPinchStart);
-    this.detector.addEventListener('pinchend', this._onPinchEnd);
+    // ✅ Escuchar los eventos configurados
+    this.detector.addEventListener(this.data.startGesture, this._onGestureStart);
+    this.detector.addEventListener(this.data.endGesture, this._onGestureEnd);
 
     const maxGrabbersText = isNaN(this.data.maxGrabbers) ? 'ilimitado' : this.data.maxGrabbers;
-    console.log(`[grabbable] ✅ Inicializado en ${this.el.id || this.el.tagName} (${this.colliderType}, maxGrabbers: ${maxGrabbersText}, invert: ${this.data.invert})`);
+    console.log(`[grabbable] ✅ Inicializado en ${this.el.id || this.el.tagName}`);
+    console.log(`  - Colisionador: ${this.colliderType}`);
+    console.log(`  - maxGrabbers: ${maxGrabbersText}`);
+    console.log(`  - invert: ${this.data.invert}`);
+    console.log(`  - startGesture: ${this.data.startGesture}`);
+    console.log(`  - endGesture: ${this.data.endGesture}`);
+  },
+
+  /**
+   * ✅ Busca el detector apropiado según el gesto configurado
+   */
+  _findDetector: function () {
+    // Determinar qué tipo de gesto se necesita
+    const needsPinch = this.data.startGesture === 'pinchstart' || this.data.startGesture === 'pinchmove';
+    const needsPoint = this.data.startGesture === 'pointstart' || this.data.startGesture === 'pointmove';
+
+    // 1. Buscar por ID común
+    let detector = document.getElementById('detector');
+    if (detector) {
+      if (needsPinch && detector.components['gesto-pellizco']) return detector;
+      if (needsPoint && detector.components['gesto-apuntar']) return detector;
+    }
+
+    // 2. Buscar en la escena por componente específico
+    const entities = this.sceneEl.querySelectorAll('a-entity');
+    for (let entity of entities) {
+      if (needsPinch && entity.components['gesto-pellizco']) {
+        console.log('[grabbable] Detector gesto-pellizco encontrado:', entity);
+        return entity;
+      }
+      if (needsPoint && entity.components['gesto-apuntar']) {
+        console.log('[grabbable] Detector gesto-apuntar encontrado:', entity);
+        return entity;
+      }
+    }
+
+    return null;
+  },
+
+  /**
+   * ✅ Detecta qué tipo de colisionador usa el detector
+   */
+  _detectColliderType: function () {
+    const gestoComp = this.detector.components['gesto-pellizco'] ||
+      this.detector.components['gesto-apuntar'];
+
+    return gestoComp && gestoComp.data.colliderType ? gestoComp.data.colliderType : 'sat-collider';
   },
 
   _createDetector: function () {
-    console.log('[grabbable] Creando detector automático...');
-    
+    console.log('[grabbable] Creando detector automático con gesto-pellizco...');
+
     const detector = document.createElement('a-entity');
     detector.setAttribute('id', 'detector');
     detector.setAttribute('gesto-pellizco', {
@@ -63,10 +113,10 @@ AFRAME.registerComponent('grabbable', {
       debugCollider: false,
       colliderType: 'sat-collider'
     });
-    
+
     this.sceneEl.appendChild(detector);
     this.detector = detector;
-    
+
     const manos = document.createElement('a-entity');
     manos.setAttribute('manos-esferas', {
       useJointRadius: true,
@@ -80,15 +130,14 @@ AFRAME.registerComponent('grabbable', {
 
   remove: function () {
     if (this.detector) {
-      this.detector.removeEventListener('pinchstart', this._onPinchStart);
-      this.detector.removeEventListener('pinchend', this._onPinchEnd);
+      this.detector.removeEventListener(this.data.startGesture, this._onGestureStart);
+      this.detector.removeEventListener(this.data.endGesture, this._onGestureEnd);
     }
-    
+
     while (this.grabbers.length > 0) {
       this._releaseGrab(this.grabbers[0].hand);
     }
 
-    // Por seguridad, quitar estado 'grabbed' al remover el componente
     if (this.el.is('grabbed')) {
       this.el.removeState('grabbed');
       console.log(`[grabbable] ❌ Estado 'grabbed' eliminado (componente removido)`);
@@ -97,10 +146,10 @@ AFRAME.registerComponent('grabbable', {
 
   _ensureCollider: function () {
     const hasCollider = this.el.components['sat-collider'] || this.el.components['obb-collider'];
-    
+
     if (!hasCollider) {
       let size = this.data.colliderSize;
-      
+
       const geometry = this.el.getAttribute('geometry');
       if (geometry) {
         if (geometry.primitive === 'box') {
@@ -114,52 +163,37 @@ AFRAME.registerComponent('grabbable', {
           size = { x: r, y: r, z: r };
         }
       }
-      
+
       console.log(`[grabbable] Añadiendo ${this.colliderType} con tamaño:`, size);
-      
+
       const colliderConfig = `size: ${size.x} ${size.y} ${size.z}; debug: ${this.data.debug}`;
       this.el.setAttribute(this.colliderType, colliderConfig);
     }
   },
 
-  _onOBBCollisionStart: function(e) {
-    const collidedWith = e.detail.withEl;
-    if (collidedWith && collidedWith.id && collidedWith.id.startsWith('hand-collider-')) {
-      const hand = collidedWith.id.includes('left') ? 'left' : 'right';
-      this.inContact[hand] = true;
-      console.log(`[grabbable] 🟢 Contacto con mano ${hand}`);
-    }
-  },
-
-  _onOBBCollisionEnd: function(e) {
-    const collidedWith = e.detail.withEl;
-    if (collidedWith && collidedWith.id && collidedWith.id.startsWith('hand-collider-')) {
-      const hand = collidedWith.id.includes('left') ? 'left' : 'right';
-      this.inContact[hand] = false;
-      console.log(`[grabbable] 🔴 Perdió contacto con mano ${hand}`);
-    }
-  },
-
   tick: function () {
     if (!this.detector) return;
-    
-    const gestoComp = this.detector.components['gesto-pellizco'];
-    if (!gestoComp) return;
 
-    // Detección de colisión manual para sat-collider
+    // ✅ Obtener el componente de gesto activo
+    const gestoComp = this.detector.components['gesto-pellizco'] ||
+      this.detector.components['gesto-apuntar'];
+
+    if (!gestoComp || !gestoComp.getHandCollider) return;
+
+    // Detección de colisión
     if (this.colliderType === 'sat-collider') {
       const objectCollider = this.el.components['sat-collider'];
       if (!objectCollider) return;
 
       ['left', 'right'].forEach(h => {
         const handCollider = gestoComp.getHandCollider(h);
-        
+
         if (handCollider) {
           const wasInContact = this.inContact[h];
           const handOBB = handCollider.getOBB();
           const objectOBB = objectCollider.getOBB();
           this.inContact[h] = handCollider.testCollision(objectOBB);
-          
+
           if (this.inContact[h] && !wasInContact) {
             console.log(`[grabbable] 🟢 Contacto con mano ${h}`);
           } else if (!this.inContact[h] && wasInContact) {
@@ -174,32 +208,28 @@ AFRAME.registerComponent('grabbable', {
     // Verificar agarres activos
     for (let i = this.grabbers.length - 1; i >= 0; i--) {
       const grabber = this.grabbers[i];
-      if (!this.inContact[grabber.hand] || !this.isPinching[grabber.hand]) {
+      if (!this.inContact[grabber.hand] || !this.isGesturing[grabber.hand]) {
         this._releaseGrab(grabber.hand);
       }
     }
 
-    // Aplicar invert continuamente
+    // Aplicar invert
     if (this.data.invert && this.grabbers.length > 0) {
       const grabber = this.grabbers[0];
       const handColliderEl = grabber.colliderEntity;
-      
-      // Posición actual de la mano
+
       const handWorldPos = new THREE.Vector3();
       handColliderEl.object3D.getWorldPosition(handWorldPos);
-      
-      // Calcular el offset desde la posición inicial de la mano
+
       const handInitialPos = grabber.handInitialWorld;
       const handMovement = new THREE.Vector3().subVectors(handWorldPos, handInitialPos);
-      
-      // Aplicar movimiento invertido al objeto
+
       const invertedTargetPos = grabber.grabCenterWorld.clone().sub(handMovement);
-      
-      // Convertir a coordenadas locales del padre (mano)
+
       const parentInverseMatrix = new THREE.Matrix4();
       parentInverseMatrix.copy(handColliderEl.object3D.matrixWorld).invert();
       const localPos = invertedTargetPos.clone().applyMatrix4(parentInverseMatrix);
-      
+
       this.el.object3D.position.copy(localPos);
     }
 
@@ -207,9 +237,9 @@ AFRAME.registerComponent('grabbable', {
     if (this.data.suppressY && this.originalY !== null && this.grabbers.length > 0) {
       const worldPos = new THREE.Vector3();
       this.el.object3D.getWorldPosition(worldPos);
-      
+
       worldPos.y = this.originalY;
-      
+
       const parent = this.el.object3D.parent;
       const parentInverseMatrix = new THREE.Matrix4();
       parentInverseMatrix.copy(parent.matrixWorld).invert();
@@ -218,11 +248,11 @@ AFRAME.registerComponent('grabbable', {
     }
   },
 
-  _onPinchStart: function (e) {
+  _onGestureStart: function (e) {
     const hand = e.detail && e.detail.hand;
     if (!hand) return;
 
-    this.isPinching[hand] = true;
+    this.isGesturing[hand] = true;
 
     const hasLimit = !isNaN(this.data.maxGrabbers);
     const belowLimit = !hasLimit || this.grabbers.length < this.data.maxGrabbers;
@@ -232,11 +262,11 @@ AFRAME.registerComponent('grabbable', {
     }
   },
 
-  _onPinchEnd: function (e) {
+  _onGestureEnd: function (e) {
     const hand = e.detail && e.detail.hand;
     if (!hand) return;
 
-    this.isPinching[hand] = false;
+    this.isGesturing[hand] = false;
 
     const grabberIndex = this.grabbers.findIndex(g => g.hand === hand);
     if (grabberIndex !== -1) {
@@ -245,14 +275,16 @@ AFRAME.registerComponent('grabbable', {
   },
 
   _startGrab: function (hand) {
-    const gestoComp = this.detector.components['gesto-pellizco'];
+    // ✅ Obtener el componente de gesto activo
+    const gestoComp = this.detector.components['gesto-pellizco'] ||
+      this.detector.components['gesto-apuntar'];
+
     const handCollider = gestoComp.getHandCollider(hand);
     if (!handCollider) return;
 
     const handColliderEl = gestoComp.state[hand].colliderEntity;
     if (!handColliderEl) return;
 
-    // Verificar si estaba previamente sin agarrar (para añadir estado 'grabbed')
     const wasGrabbed = this.grabbers.length > 0;
 
     if (!isNaN(this.data.maxGrabbers) && this.grabbers.length >= this.data.maxGrabbers) {
@@ -266,7 +298,7 @@ AFRAME.registerComponent('grabbable', {
     const objWorldPos = new THREE.Vector3();
     const objWorldQuat = new THREE.Quaternion();
     const objWorldScale = new THREE.Vector3();
-    
+
     this.el.object3D.getWorldPosition(objWorldPos);
     this.el.object3D.getWorldQuaternion(objWorldQuat);
     this.el.object3D.getWorldScale(objWorldScale);
@@ -282,20 +314,20 @@ AFRAME.registerComponent('grabbable', {
 
     const handInverseMatrix = new THREE.Matrix4();
     handInverseMatrix.copy(handColliderEl.object3D.matrixWorld).invert();
-    
+
     let localPos = objWorldPos.clone().applyMatrix4(handInverseMatrix);
-    
+
     if (this.data.invert) {
       localPos.multiplyScalar(-1);
     }
-    
+
     this.el.object3D.position.copy(localPos);
-    
+
     const handWorldQuat = new THREE.Quaternion();
     handColliderEl.object3D.getWorldQuaternion(handWorldQuat);
     const handInverseQuat = handWorldQuat.clone().invert();
     this.el.object3D.quaternion.copy(handInverseQuat).multiply(objWorldQuat);
-    
+
     this.el.object3D.scale.copy(objWorldScale);
 
     const grabData = {
@@ -310,14 +342,13 @@ AFRAME.registerComponent('grabbable', {
 
     this.grabbers.push(grabData);
 
-    // ✅ AÑADIR ESTADO 'grabbed' (estilo super-hands)
     if (!wasGrabbed) {
       this.el.addState('grabbed');
-      console.log(`[grabbable] 📦 Estado 'grabbed' AÑADIDO - Objeto siendo transportado`);
+      console.log(`[grabbable] 📦 Estado 'grabbed' AÑADIDO`);
     }
 
-    console.log(`[grabbable] 🎯 AGARRADO por mano ${hand} (total agarres: ${this.grabbers.length}, invert: ${this.data.invert})`);
-    this.el.emit('grab-start', { hand, grabbers: this.grabbers.length }, false);
+    console.log(`[grabbable] 🎯 AGARRADO por mano ${hand} con gesto '${this.data.startGesture}' (total: ${this.grabbers.length})`);
+    this.el.emit('grab-start', { hand, grabbers: this.grabbers.length, gesture: this.data.startGesture }, false);
   },
 
   _releaseGrab: function (hand) {
@@ -330,7 +361,7 @@ AFRAME.registerComponent('grabbable', {
       const worldPos = new THREE.Vector3();
       const worldQuat = new THREE.Quaternion();
       const worldScale = new THREE.Vector3();
-      
+
       this.el.object3D.getWorldPosition(worldPos);
       this.el.object3D.getWorldQuaternion(worldQuat);
       this.el.object3D.getWorldScale(worldScale);
@@ -344,15 +375,15 @@ AFRAME.registerComponent('grabbable', {
       const parentInverseMatrix = new THREE.Matrix4();
       const targetParent = grabData.originalParent || this.sceneEl.object3D;
       parentInverseMatrix.copy(targetParent.matrixWorld).invert();
-      
+
       const localPos = worldPos.clone().applyMatrix4(parentInverseMatrix);
       this.el.object3D.position.copy(localPos);
-      
+
       const parentWorldQuat = new THREE.Quaternion();
       targetParent.getWorldQuaternion(parentWorldQuat);
       const parentInverseQuat = parentWorldQuat.clone().invert();
       this.el.object3D.quaternion.copy(parentInverseQuat).multiply(worldQuat);
-      
+
       this.el.object3D.scale.copy(worldScale);
 
       this.originalY = null;
@@ -360,7 +391,7 @@ AFRAME.registerComponent('grabbable', {
       const nextGrabber = this.grabbers.find((g, i) => i !== grabberIndex);
       if (nextGrabber) {
         console.log(`[grabbable] Transferir agarre de ${hand} a ${nextGrabber.hand}`);
-        
+
         const worldPos = new THREE.Vector3();
         const worldQuat = new THREE.Quaternion();
         this.el.object3D.getWorldPosition(worldPos);
@@ -381,13 +412,12 @@ AFRAME.registerComponent('grabbable', {
 
     this.grabbers.splice(grabberIndex, 1);
 
-    // ✅ QUITAR ESTADO 'grabbed' cuando ya no hay ningún agarre
     if (this.grabbers.length === 0) {
       this.el.removeState('grabbed');
-      console.log(`[grabbable] 📭 Estado 'grabbed' ELIMINADO - Objeto ya no está siendo transportado`);
+      console.log(`[grabbable] 📭 Estado 'grabbed' ELIMINADO`);
     }
 
-    console.log(`[grabbable] 🔓 SOLTADO por mano ${hand} (agarres restantes: ${this.grabbers.length})`);
-    this.el.emit('grab-end', { hand, grabbers: this.grabbers.length }, false);
+    console.log(`[grabbable] 🔓 SOLTADO por mano ${hand} con gesto '${this.data.endGesture}' (restantes: ${this.grabbers.length})`);
+    this.el.emit('grab-end', { hand, grabbers: this.grabbers.length, gesture: this.data.endGesture }, false);
   }
 });
