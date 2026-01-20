@@ -10,6 +10,7 @@
     delete AFRAME.components["grabbable"];
   </script>
   <script src="sat-collider.js"></script>
+  <script src="obb-collider.js"></script>
   <script src="GestoPellizco.js"></script>
   <script src="GestoApuntar.js"></script>
   <script src="ManosEsferas.js"></script>
@@ -28,8 +29,8 @@
                                startDistance:0.025; 
                                endDistance:0.035; 
                                emitEachFrame:true; 
-                               debugCollider:false;
-                               colliderType:sat-collider">
+                               debugCollider:true;
+                               colliderType:obb-collider">
       </a-entity>
 
       <!-- Detector de apuntar -->
