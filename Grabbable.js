@@ -5,14 +5,13 @@
  */
 AFRAME.registerComponent('grabbable', {
   schema: {
-    maxGrabbers: { type: 'int', default: NaN },
+    maxGrabbers: { type: 'int', default: 1 },
     invert: { type: 'boolean', default: false },
     suppressY: { type: 'boolean', default: false },
     colliderSize: { type: 'vec3', default: { x: 0.3, y: 0.3, z: 0.3 } },
     debug: { type: 'boolean', default: false },
-    // ✅ NUEVO: Elegir qué gesto usar
-    startGesture: { type: 'string', default: 'pinchstart' },  // 'pinchstart' o 'pointstart'
-    endGesture: { type: 'string', default: 'pinchend' }       // 'pinchend' o 'pointend'
+    startGesture: { type: 'string', default: 'pinchstart' },
+    endGesture: { type: 'string', default: 'pinchend' }
   },
 
   init: function () {
@@ -26,7 +25,6 @@ AFRAME.registerComponent('grabbable', {
   },
 
   _setup: function () {
-    // ✅ Buscar detector según el gesto configurado
     this.detector = this._findDetector();
 
     if (!this.detector) {
@@ -45,10 +43,13 @@ AFRAME.registerComponent('grabbable', {
 
     this._onGestureStart = this._onGestureStart.bind(this);
     this._onGestureEnd = this._onGestureEnd.bind(this);
+    this._onStretchTransfer = this._onStretchTransfer.bind(this);
 
-    // ✅ Escuchar los eventos configurados
     this.detector.addEventListener(this.data.startGesture, this._onGestureStart);
     this.detector.addEventListener(this.data.endGesture, this._onGestureEnd);
+
+    // ✅ NUEVO: Escuchar evento de transferencia de agarre desde stretchable
+    this.el.addEventListener('stretch-transfer-grab', this._onStretchTransfer);
 
     const maxGrabbersText = isNaN(this.data.maxGrabbers) ? 'ilimitado' : this.data.maxGrabbers;
     console.log(`[grabbable] ✅ Inicializado en ${this.el.id || this.el.tagName}`);
@@ -59,40 +60,31 @@ AFRAME.registerComponent('grabbable', {
     console.log(`  - endGesture: ${this.data.endGesture}`);
   },
 
-  /**
-   * ✅ Busca el detector apropiado según el gesto configurado
-   */
   _findDetector: function () {
-    // Determinar qué tipo de gesto se necesita
     const needsPinch = this.data.startGesture === 'pinchstart' || this.data.startGesture === 'pinchmove';
     const needsPoint = this.data.startGesture === 'pointstart' || this.data.startGesture === 'pointmove';
 
-    // 1. Buscar por ID común
-    let detector = document.getElementById('detector');
+    let detector = document.getElementById('detector-pellizco');
+    if (detector && needsPinch && detector.components['gesto-pellizco']) return detector;
+
+    detector = document.getElementById('detector-apuntar');
+    if (detector && needsPoint && detector.components['gesto-apuntar']) return detector;
+
+    detector = document.getElementById('detector');
     if (detector) {
       if (needsPinch && detector.components['gesto-pellizco']) return detector;
       if (needsPoint && detector.components['gesto-apuntar']) return detector;
     }
 
-    // 2. Buscar en la escena por componente específico
     const entities = this.sceneEl.querySelectorAll('a-entity');
     for (let entity of entities) {
-      if (needsPinch && entity.components['gesto-pellizco']) {
-        console.log('[grabbable] Detector gesto-pellizco encontrado:', entity);
-        return entity;
-      }
-      if (needsPoint && entity.components['gesto-apuntar']) {
-        console.log('[grabbable] Detector gesto-apuntar encontrado:', entity);
-        return entity;
-      }
+      if (needsPinch && entity.components['gesto-pellizco']) return entity;
+      if (needsPoint && entity.components['gesto-apuntar']) return entity;
     }
 
     return null;
   },
 
-  /**
-   * ✅ Detecta qué tipo de colisionador usa el detector
-   */
   _detectColliderType: function () {
     const gestoComp = this.detector.components['gesto-pellizco'] ||
       this.detector.components['gesto-apuntar'];
@@ -134,6 +126,8 @@ AFRAME.registerComponent('grabbable', {
       this.detector.removeEventListener(this.data.endGesture, this._onGestureEnd);
     }
 
+    this.el.removeEventListener('stretch-transfer-grab', this._onStretchTransfer);
+
     while (this.grabbers.length > 0) {
       this._releaseGrab(this.grabbers[0].hand);
     }
@@ -174,7 +168,28 @@ AFRAME.registerComponent('grabbable', {
   tick: function () {
     if (!this.detector) return;
 
-    // ✅ Obtener el componente de gesto activo
+    // ✅ Si el objeto está en modo "stretched", NO mover (solo stretchable controla)
+    if (this.el.is('stretched')) {
+      const gestoComp = this.detector.components['gesto-pellizco'] ||
+        this.detector.components['gesto-apuntar'];
+
+      if (gestoComp && gestoComp.getHandCollider && this.colliderType === 'sat-collider') {
+        const objectCollider = this.el.components['sat-collider'];
+        if (objectCollider) {
+          ['left', 'right'].forEach(h => {
+            const handCollider = gestoComp.getHandCollider(h);
+            if (handCollider) {
+              const objectOBB = objectCollider.getOBB();
+              this.inContact[h] = handCollider.testCollision(objectOBB);
+            } else {
+              this.inContact[h] = false;
+            }
+          });
+        }
+      }
+      return; // ⚠️ SALIR SIN MOVER EL OBJETO NI VERIFICAR AGARRES
+    }
+
     const gestoComp = this.detector.components['gesto-pellizco'] ||
       this.detector.components['gesto-apuntar'];
 
@@ -190,7 +205,6 @@ AFRAME.registerComponent('grabbable', {
 
         if (handCollider) {
           const wasInContact = this.inContact[h];
-          const handOBB = handCollider.getOBB();
           const objectOBB = objectCollider.getOBB();
           this.inContact[h] = handCollider.testCollision(objectOBB);
 
@@ -254,6 +268,12 @@ AFRAME.registerComponent('grabbable', {
 
     this.isGesturing[hand] = true;
 
+    // ✅ CRÍTICO: Si ya hay un grabber, NO añadir la segunda mano
+    if (this.grabbers.length > 0) {
+      console.log(`[grabbable] ℹ️ Mano ${hand} detectada pero ya hay ${this.grabbers.length} grabber(s). Ignorando para permitir stretch.`);
+      return;
+    }
+
     const hasLimit = !isNaN(this.data.maxGrabbers);
     const belowLimit = !hasLimit || this.grabbers.length < this.data.maxGrabbers;
 
@@ -268,14 +288,47 @@ AFRAME.registerComponent('grabbable', {
 
     this.isGesturing[hand] = false;
 
+    // ✅ Si está en modo stretched, NO soltar el grab aunque pierda el gesto
+    if (this.el.is('stretched')) {
+      console.log(`[grabbable] ℹ️ Mano ${hand} soltó gesto pero objeto en modo stretched. NO soltando grab.`);
+      return;
+    }
+
     const grabberIndex = this.grabbers.findIndex(g => g.hand === hand);
     if (grabberIndex !== -1) {
       this._releaseGrab(hand);
     }
   },
 
+  // ✅ NUEVO: Manejar transferencia de agarre desde stretchable
+  _onStretchTransfer: function (e) {
+    const hand = e.detail && e.detail.hand;
+    if (!hand) return;
+
+    console.log(`[grabbable] 🔄 Recibiendo transferencia de agarre para mano ${hand}`);
+
+    // Si ya hay un grabber con esa mano, no hacer nada
+    if (this.grabbers.find(g => g.hand === hand)) {
+      console.log(`[grabbable] ℹ️ Mano ${hand} ya tiene agarre activo`);
+      return;
+    }
+
+    // Si hay un grabber de otra mano, liberarlo primero
+    if (this.grabbers.length > 0) {
+      const oldHand = this.grabbers[0].hand;
+      console.log(`[grabbable] 🔄 Liberando agarre anterior de mano ${oldHand}`);
+      this._releaseGrab(oldHand);
+    }
+
+    // Iniciar nuevo agarre con la mano que queda
+    if (this.isGesturing[hand] && this.inContact[hand]) {
+      this._startGrab(hand);
+    } else {
+      console.log(`[grabbable] ⚠️ No se puede transferir agarre: mano ${hand} no cumple condiciones (gesto: ${this.isGesturing[hand]}, contacto: ${this.inContact[hand]})`);
+    }
+  },
+
   _startGrab: function (hand) {
-    // ✅ Obtener el componente de gesto activo
     const gestoComp = this.detector.components['gesto-pellizco'] ||
       this.detector.components['gesto-apuntar'];
 
@@ -387,27 +440,6 @@ AFRAME.registerComponent('grabbable', {
       this.el.object3D.scale.copy(worldScale);
 
       this.originalY = null;
-    } else {
-      const nextGrabber = this.grabbers.find((g, i) => i !== grabberIndex);
-      if (nextGrabber) {
-        console.log(`[grabbable] Transferir agarre de ${hand} a ${nextGrabber.hand}`);
-
-        const worldPos = new THREE.Vector3();
-        const worldQuat = new THREE.Quaternion();
-        this.el.object3D.getWorldPosition(worldPos);
-        this.el.object3D.getWorldQuaternion(worldQuat);
-
-        nextGrabber.colliderEntity.object3D.add(this.el.object3D);
-
-        const handInverseMatrix = new THREE.Matrix4();
-        handInverseMatrix.copy(nextGrabber.colliderEntity.object3D.matrixWorld).invert();
-        this.el.object3D.position.copy(worldPos).applyMatrix4(handInverseMatrix);
-
-        const handWorldQuat = new THREE.Quaternion();
-        nextGrabber.colliderEntity.object3D.getWorldQuaternion(handWorldQuat);
-        const handInverseQuat = handWorldQuat.clone().invert();
-        this.el.object3D.quaternion.copy(handInverseQuat).multiply(worldQuat);
-      }
     }
 
     this.grabbers.splice(grabberIndex, 1);

@@ -20,16 +20,24 @@
     <a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking">
 
         <a-camera position="0 1.6 0">
-            <!-- Detector de pellizco -->
-            <a-entity id="detector-pellizco" gesto-pellizco="hand:any; emitEachFrame:true">
+            <!-- Detector de pellizco con DEBUG activado -->
+            <a-entity id="detector-pellizco" gesto-pellizco="hand:any; 
+                                     emitEachFrame:true;
+                                     debugCollider:true;
+                                     colliderSize:0.12 0.08 0.18">
             </a-entity>
 
             <!-- Visualizar manos -->
-            <a-entity manos-esferas></a-entity>
+            <a-entity manos-esferas="useJointRadius:true; 
+                                     colorLeft:#39f; 
+                                     colorRight:#f93; 
+                                     opacity:0.7">
+            </a-entity>
         </a-camera>
 
-        <!-- Cubo stretchable -->
-        <a-box grabbable stretchable color="#4CC3D9" position="0 1.6 -1" width="0.4" height="0.4" depth="0.4">
+        <!-- Cubo stretchable con DEBUG activado -->
+        <a-box grabbable="debug:true" stretchable color="#4CC3D9" position="0 1.6 -1" width="0.4" height="0.4"
+            depth="0.4">
         </a-box>
 
         <!-- Suelo -->
