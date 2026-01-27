@@ -5,21 +5,21 @@
  */
 AFRAME.registerComponent('gesto-pellizco', {
     schema: {
-        hand: {type: 'string', default: 'any'},
-        startDistance: {type: 'number', default: 0.025},
-        endDistance: {type: 'number', default: 0.035},
-        emitEachFrame: {type: 'boolean', default: false},
-        log: {type: 'boolean', default: false},
-        colliderSize: {type: 'vec3', default: {x: 0.12, y: 0.08, z: 0.18}},
-        debugCollider: {type: 'boolean', default: false},
-        colliderType: {type: 'string', default: 'sat-collider', oneOf: ['obb-collider', 'sat-collider']}
+        hand: { type: 'string', default: 'any' },
+        startDistance: { type: 'number', default: 0.025 },
+        endDistance: { type: 'number', default: 0.035 },
+        emitEachFrame: { type: 'boolean', default: false },
+        log: { type: 'boolean', default: false },
+        colliderSize: { type: 'vec3', default: { x: 0.12, y: 0.08, z: 0.18 } },
+        debugCollider: { type: 'boolean', default: false },
+        colliderType: { type: 'string', default: 'sat-collider', oneOf: ['obb-collider', 'sat-collider'] }
     },
 
     init: function () {
         this.renderer = null;
         this.referenceSpace = null;
         this.state = {
-            left:  { pinching: false, lastDistance: null, colliderEntity: null },
+            left: { pinching: false, lastDistance: null, colliderEntity: null },
             right: { pinching: false, lastDistance: null, colliderEntity: null }
         };
 
@@ -27,30 +27,26 @@ AFRAME.registerComponent('gesto-pellizco', {
             const handState = this.state[h];
             const colliderEntity = document.createElement('a-entity');
             colliderEntity.setAttribute('id', `hand-collider-${h}`);
-            
+
             if (this.data.colliderType === 'obb-collider') {
-                // PRIMERO: Crear la geometría que define el tamaño
+                // ✅ Usar obb-collider nativo de A-Frame
                 colliderEntity.setAttribute('geometry', {
                     primitive: 'box',
                     width: this.data.colliderSize.x,
                     height: this.data.colliderSize.y,
                     depth: this.data.colliderSize.z
                 });
-                
-                // SEGUNDO: Configurar obb-collider SIN el parámetro size
-                // (usa automáticamente el tamaño de la geometría)
+
                 colliderEntity.setAttribute('obb-collider', {
                     trackedObject3D: 'mesh'
                 });
-                
-                // TERCERO: Hacer la geometría invisible
-                colliderEntity.setAttribute('material', { 
+
+                colliderEntity.setAttribute('material', {
                     visible: false,
                     transparent: true,
                     opacity: 0
                 });
-                
-                // Debug manual (este sí respeta el tamaño)
+
                 if (this.data.debugCollider) {
                     const debugBox = document.createElement('a-box');
                     debugBox.setAttribute('width', this.data.colliderSize.x);
@@ -64,10 +60,10 @@ AFRAME.registerComponent('gesto-pellizco', {
                     handState.debugBox = debugBox;
                 }
             } else {
-                // Usar sat-collider (SIN el parámetro type, siempre SAT puro)
+                // Usar sat-collider
                 const colliderConfig = `size: ${this.data.colliderSize.x} ${this.data.colliderSize.y} ${this.data.colliderSize.z}; debug: ${this.data.debugCollider}`;
                 colliderEntity.setAttribute('sat-collider', colliderConfig);
-                
+
                 if (this.data.debugCollider) {
                     colliderEntity.addEventListener('componentinitialized', (evt) => {
                         if (evt.detail.name === 'sat-collider') {
@@ -79,7 +75,7 @@ AFRAME.registerComponent('gesto-pellizco', {
                     });
                 }
             }
-            
+
             this.el.sceneEl.appendChild(colliderEntity);
             handState.colliderEntity = colliderEntity;
         });
@@ -122,20 +118,20 @@ AFRAME.registerComponent('gesto-pellizco', {
             const indexJoint = inputSource.hand.get('index-finger-tip');
             const wristJoint = inputSource.hand.get('wrist');
             const middleTipJoint = inputSource.hand.get('middle-finger-tip');
-            
+
             if (!thumbJoint || !indexJoint || !wristJoint || !middleTipJoint) continue;
 
             const thumbPose = frame.getJointPose(thumbJoint, this.referenceSpace);
             const indexPose = frame.getJointPose(indexJoint, this.referenceSpace);
             const wristPose = frame.getJointPose(wristJoint, this.referenceSpace);
             const middleTipPose = frame.getJointPose(middleTipJoint, this.referenceSpace);
-            
+
             if (!thumbPose || !indexPose || !wristPose || !middleTipPose) continue;
 
             const dx = thumbPose.transform.position.x - indexPose.transform.position.x;
             const dy = thumbPose.transform.position.y - indexPose.transform.position.y;
             const dz = thumbPose.transform.position.z - indexPose.transform.position.z;
-            const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
             const handState = this.state[handedness];
             handState.lastDistance = distance;
@@ -172,30 +168,53 @@ AFRAME.registerComponent('gesto-pellizco', {
         this.el.emit(type, { hand, distance }, false);
     },
 
-    getHandCollider: function(handedness) {
+    // ✅ getHandCollider - Wrapper compatible con obb-collider nativo
+    getHandCollider: function (handedness) {
         const handState = this.state[handedness];
         if (!handState || !handState.colliderEntity) return null;
-        
+
         if (this.data.colliderType === 'obb-collider') {
-            // Wrapper para obb-collider nativo
+            const obbComp = handState.colliderEntity.components['obb-collider'];
+
+            // Wrapper para que sea compatible con sat-collider
             return {
                 el: handState.colliderEntity,
                 getOBB: () => {
+                    if (obbComp && obbComp.obb) {
+                        return obbComp.obb;
+                    }
+
+                    // Fallback manual
                     const pos = new THREE.Vector3();
                     const quat = new THREE.Quaternion();
                     handState.colliderEntity.object3D.getWorldPosition(pos);
                     handState.colliderEntity.object3D.getWorldQuaternion(quat);
-                    
+
                     return {
                         center: pos,
-                        size: new THREE.Vector3(this.data.colliderSize.x, this.data.colliderSize.y, this.data.colliderSize.z),
+                        size: new THREE.Vector3(
+                            this.data.colliderSize.x,
+                            this.data.colliderSize.y,
+                            this.data.colliderSize.z
+                        ),
                         halfSize: new THREE.Vector3(
                             this.data.colliderSize.x / 2,
                             this.data.colliderSize.y / 2,
                             this.data.colliderSize.z / 2
                         ),
-                        quaternion: quat
+                        quaternion: quat,
+                        matrix: new THREE.Matrix4().compose(pos, quat, new THREE.Vector3(1, 1, 1))
                     };
+                },
+                testCollision: (otherOBB) => {
+                    if (obbComp && obbComp.intersectsOBB) {
+                        return obbComp.intersectsOBB(otherOBB);
+                    }
+                    // Fallback: test simple de distancia
+                    const handOBB = this.getHandCollider(handedness).getOBB();
+                    const distance = handOBB.center.distanceTo(otherOBB.center);
+                    const maxDist = (handOBB.halfSize.length() + otherOBB.halfSize.length());
+                    return distance < maxDist;
                 }
             };
         } else {
@@ -204,7 +223,7 @@ AFRAME.registerComponent('gesto-pellizco', {
         }
     },
 
-    getHandOBB: function(handedness) {
+    getHandOBB: function (handedness) {
         const collider = this.getHandCollider(handedness);
         return collider ? collider.getOBB() : null;
     }
