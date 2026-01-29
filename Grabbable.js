@@ -31,17 +31,17 @@ AFRAME.registerComponent('grabbable', {
       return;
     }
 
-    // ✅ Auto-detectar tipo de colisionador del detector
     this.colliderType = this._detectColliderType();
 
     this.grabbers = [];
     this.originalY = null;
     this.inContact = { left: false, right: false };
     this.isGesturing = { left: false, right: false };
+    // ✅ NUEVO: Rastrear si el contacto fue DESPUÉS del pellizco
+    this.validContactForGrab = { left: false, right: false };
 
     this._ensureCollider();
 
-    // ✅ Event listeners para obb-collider nativo
     if (this.colliderType === 'obb-collider') {
       this._onOBBCollisionStart = this._onOBBCollisionStart.bind(this);
       this._onOBBCollisionEnd = this._onOBBCollisionEnd.bind(this);
@@ -127,7 +127,6 @@ AFRAME.registerComponent('grabbable', {
       console.log(`[grabbable] ➕ Añadiendo ${this.colliderType} con tamaño:`, size);
 
       if (this.colliderType === 'obb-collider') {
-        // ✅ ARREGLADO: No sobrescribir geometría si ya existe
         if (!geometry) {
           this.el.setAttribute('geometry', {
             primitive: 'box',
@@ -141,7 +140,6 @@ AFRAME.registerComponent('grabbable', {
           trackedObject3D: 'mesh'
         });
 
-        // ✅ ARREGLADO: No sobrescribir material si ya es visible
         const existingMaterial = this.el.getAttribute('material');
         if (!existingMaterial || existingMaterial.visible === false) {
           if (this.data.debug) {
@@ -160,7 +158,6 @@ AFRAME.registerComponent('grabbable', {
           }
         }
       } else {
-        // sat-collider
         const colliderConfig = `size: ${size.x} ${size.y} ${size.z}; debug: ${this.data.debug}`;
         this.el.setAttribute('sat-collider', colliderConfig);
       }
@@ -169,13 +166,20 @@ AFRAME.registerComponent('grabbable', {
     }
   },
 
-  // ✅ Handlers para obb-collider nativo
   _onOBBCollisionStart: function (e) {
     const collidedWith = e.detail.withEl;
     if (collidedWith?.id.startsWith('hand-collider-') || collidedWith?.id.startsWith('hand-point-collider-')) {
       const hand = collidedWith.id.includes('left') ? 'left' : 'right';
       this.inContact[hand] = true;
-      console.log(`[grabbable] 🟢 CONTACTO - Mano ${hand} (OBB evento)`);
+
+      // ✅ NUEVO: Solo válido si NO está pellizcando
+      if (!this.isGesturing[hand]) {
+        this.validContactForGrab[hand] = true;
+        console.log(`[grabbable] 🟢 CONTACTO VÁLIDO - Mano ${hand} (sin pellizco previo)`);
+      } else {
+        this.validContactForGrab[hand] = false;
+        console.log(`[grabbable] 🟡 CONTACTO - Mano ${hand} (pero ya estaba pellizcando, NO válido para grab)`);
+      }
     }
   },
 
@@ -184,7 +188,8 @@ AFRAME.registerComponent('grabbable', {
     if (collidedWith?.id.startsWith('hand-collider-') || collidedWith?.id.startsWith('hand-point-collider-')) {
       const hand = collidedWith.id.includes('left') ? 'left' : 'right';
       this.inContact[hand] = false;
-      console.log(`[grabbable] 🔴 SIN CONTACTO - Mano ${hand} (OBB evento)`);
+      this.validContactForGrab[hand] = false;
+      console.log(`[grabbable] 🔴 SIN CONTACTO - Mano ${hand}`);
     }
   },
 
@@ -196,7 +201,6 @@ AFRAME.registerComponent('grabbable', {
 
     if (!gestoComp?.getHandCollider) return;
 
-    // ✅ Detección manual solo para SAT-collider
     if (this.colliderType === 'sat-collider') {
       const objectCollider = this.el.components['sat-collider'];
       if (!objectCollider) return;
@@ -210,16 +214,24 @@ AFRAME.registerComponent('grabbable', {
           this.inContact[h] = handCollider.testCollision(objectOBB);
 
           if (this.inContact[h] && !wasInContact) {
-            console.log(`[grabbable] 🟢 CONTACTO - Mano ${h} (SAT manual)`);
+            // ✅ NUEVO: Solo válido si NO está pellizcando
+            if (!this.isGesturing[h]) {
+              this.validContactForGrab[h] = true;
+              console.log(`[grabbable] 🟢 CONTACTO VÁLIDO - Mano ${h} (sin pellizco previo)`);
+            } else {
+              this.validContactForGrab[h] = false;
+              console.log(`[grabbable] 🟡 CONTACTO - Mano ${h} (pero ya estaba pellizcando, NO válido)`);
+            }
           } else if (!this.inContact[h] && wasInContact) {
-            console.log(`[grabbable] 🔴 SIN CONTACTO - Mano ${h} (SAT manual)`);
+            this.validContactForGrab[h] = false;
+            console.log(`[grabbable] 🔴 SIN CONTACTO - Mano ${h}`);
           }
         } else {
           this.inContact[h] = false;
+          this.validContactForGrab[h] = false;
         }
       });
     }
-    // Para OBB-collider, los eventos lo manejan automáticamente
 
     // Verificar agarres activos
     for (let i = this.grabbers.length - 1; i >= 0; i--) {
@@ -267,10 +279,17 @@ AFRAME.registerComponent('grabbable', {
 
     this.isGesturing[hand] = true;
 
+    // ✅ NUEVO: Si hace contacto DESPUÉS de empezar a pellizcar, marcarlo como válido
+    if (this.inContact[hand] && !this.validContactForGrab[hand]) {
+      console.log(`[grabbable] ⚠️ Pellizco iniciado CON contacto previo - Mano ${hand} - Se requiere re-contacto`);
+      return;
+    }
+
     const hasLimit = !isNaN(this.data.maxGrabbers);
     const belowLimit = !hasLimit || this.grabbers.length < this.data.maxGrabbers;
 
-    if (this.inContact[hand] && belowLimit) {
+    // ✅ NUEVO: Solo agarrar si tiene contacto VÁLIDO
+    if (this.inContact[hand] && this.validContactForGrab[hand] && belowLimit) {
       this._startGrab(hand);
     }
   },
@@ -280,6 +299,12 @@ AFRAME.registerComponent('grabbable', {
     if (!hand) return;
 
     this.isGesturing[hand] = false;
+
+    // ✅ NUEVO: Al soltar pellizco, si sigue en contacto, marcar como válido para próximo grab
+    if (this.inContact[hand]) {
+      this.validContactForGrab[hand] = true;
+      console.log(`[grabbable] ✅ Pellizco terminado con contacto - Mano ${hand} - Listo para nuevo grab`);
+    }
 
     const grabberIndex = this.grabbers.findIndex(g => g.hand === hand);
     if (grabberIndex !== -1) {
@@ -389,6 +414,30 @@ AFRAME.registerComponent('grabbable', {
       this.el.object3D.scale.copy(worldScale);
 
       this.originalY = null;
+    } else {
+      // ✅ ARREGLADO: Transferir al PRIMER grabber restante (el más antiguo)
+      const remainingGrabbers = this.grabbers.filter((g, i) => i !== grabberIndex);
+      const nextGrabber = remainingGrabbers[0]; // El más antiguo
+
+      if (nextGrabber) {
+        console.log(`[grabbable] 🔄 Transferir agarre de ${hand} a ${nextGrabber.hand} (primera mano)`);
+
+        const worldPos = new THREE.Vector3();
+        const worldQuat = new THREE.Quaternion();
+        this.el.object3D.getWorldPosition(worldPos);
+        this.el.object3D.getWorldQuaternion(worldQuat);
+
+        nextGrabber.colliderEntity.object3D.add(this.el.object3D);
+
+        const handInverseMatrix = new THREE.Matrix4();
+        handInverseMatrix.copy(nextGrabber.colliderEntity.object3D.matrixWorld).invert();
+        this.el.object3D.position.copy(worldPos).applyMatrix4(handInverseMatrix);
+
+        const handWorldQuat = new THREE.Quaternion();
+        nextGrabber.colliderEntity.object3D.getWorldQuaternion(handWorldQuat);
+        const handInverseQuat = handWorldQuat.clone().invert();
+        this.el.object3D.quaternion.copy(handInverseQuat).multiply(worldQuat);
+      }
     }
 
     this.grabbers.splice(grabberIndex, 1);
