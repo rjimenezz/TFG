@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Hoverable Simple</title>
+    <meta charset="utf-8">
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="sat-collider.js"></script>
+    <script src="GestoPellizco.js"></script>
+    <script src="ManosEsferas.js"></script>
+    <script src="Hoverable.js"></script>
+
+</head>
+
+<body>
+    <a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking">
+
+        <a-camera position="0 1.6 0">
+            <!-- Detector de mano -->
+            <a-entity gesto-pellizco="debugCollider:true; colliderType:obb-collider"></a-entity>
+
+            <!-- Visualizar manos -->
+            <a-entity manos-esferas></a-entity>
+        </a-camera>
+
+        <!-- Cubo azul → amarillo al hover -->
+        <a-box id="cubo" hoverable color="#00f" position="0 1.6 -1" width="0.3" height="0.3" depth="0.3">
+        </a-box>
+
+        <!-- Esfera roja → verde al hover -->
+        <a-sphere id="esfera" hoverable color="#f00" position="-0.6 1.6 -1" radius="0.15">
+        </a-sphere>
+
+        <!-- Suelo -->
+        <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10" color="#888"></a-plane>
+    </a-scene>
+</body>
+<script>
+    // Simple: cambiar color al hacer hover
+    document.addEventListener('DOMContentLoaded', () => {
+        const cubo = document.getElementById('cubo');
+        const esfera = document.getElementById('esfera');
+
+        // Cubo: azul → amarillo
+        cubo.addEventListener('hover-start', () => {
+            cubo.setAttribute('color', '#ff0');
+        });
+        cubo.addEventListener('hover-end', () => {
+            cubo.setAttribute('color', '#00f');
+        });
+
+        // Esfera: rojo → verde
+        esfera.addEventListener('hover-start', () => {
+            esfera.setAttribute('color', '#0f0');
+        });
+        esfera.addEventListener('hover-end', () => {
+            esfera.setAttribute('color', '#f00');
+        });
+    });
+</script>
+
+</html>
