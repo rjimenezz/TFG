@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Drag and Drop con Manos</title>
+    <meta charset="utf-8">
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+
+    <script>
+        delete AFRAME.components["grabbable"];
+    </script>
+    <script src="sat-collider.js"></script>
+    <script src="GestoPellizco.js"></script>
+    <script src="ManosEsferas.js"></script>
+    <script src="Grabbable.js"></script>
+    <script src="Draggable.js"></script>
+    <script src="Droppable.js"></script>
+</head>
+
+<body>
+    <a-scene xr-mode-ui="enabled: true" webxr="optionalFeatures: hand-tracking">
+
+        <a-camera position="0 1.6 0">
+            <!-- Detector de pellizco -->
+            <a-entity id="detector" gesto-pellizco="hand:any; 
+                                     emitEachFrame:false;
+                                     debugCollider:true;
+                                     colliderSize:0.12 0.08 0.18;
+                                     colliderType:obb-collider">
+            </a-entity>
+
+            <!-- Visualizar manos -->
+            <a-entity manos-esferas="useJointRadius:true; 
+                                     colorLeft:#39f; 
+                                     colorRight:#f93; 
+                                     opacity:0.7">
+            </a-entity>
+        </a-camera>
+
+        <!-- ✅ DRAGGABLES: Objetos que se pueden arrastrar -->
+        <a-box id="cubo-rojo" class="draggable-item" draggable="debug:true" grabbable color="#f00"
+            position="-0.5 1.6 -1" width="0.15" height="0.15" depth="0.15">
+        </a-box>
+
+        <a-sphere id="esfera-azul" class="draggable-item" draggable="debug:true" grabbable color="#00f"
+            position="0 1.6 -1" radius="0.1">
+        </a-sphere>
+
+        <a-cylinder id="cilindro-verde" class="draggable-item" draggable="debug:true" grabbable color="#0f0"
+            position="0.5 1.6 -1" radius="0.08" height="0.2">
+        </a-cylinder>
+
+        <!-- ✅ DROPPABLE 1: Acepta TODOS los draggables -->
+        <a-plane id="zona-drop-todo" droppable drop-color="color:#ff0" color="#888" position="-0.6 1.2 -1.2"
+            rotation="-15 0 0" width="0.4" height="0.4"
+            event-set__dragover="material.color: #ff0; material.opacity: 0.8"
+            event-set__dragleave="material.color: #888; material.opacity: 1">
+        </a-plane>
+
+        <!-- ✅ DROPPABLE 2: Solo acepta el cubo rojo -->
+        <a-plane id="zona-drop-cubo" droppable="accepts: #cubo-rojo; 
+                           acceptEvent: cubo-correcto;
+                           rejectEvent: cubo-incorrecto" drop-color="color:#0f0" color="#666" position="0 1.2 -1.2"
+            rotation="-15 0 0" width="0.4" height="0.4"
+            event-set__dragover="material.color: #0f0; material.opacity: 0.8"
+            event-set__dragleave="material.color: #666; material.opacity: 1"
+            event-set__correcto="material.color: #0f0; material.opacity: 1"
+            event-set__incorrecto="material.color: #f00; material.opacity: 0.5">
+        </a-plane>
+
+        <!-- ✅ DROPPABLE 3: Solo acepta objetos con clase "draggable-item" -->
+        <a-plane id="zona-drop-clase" droppable="accepts: .draggable-item" drop-color="color:#f0f" color="#444"
+            position="0.6 1.2 -1.2" rotation="-15 0 0" width="0.4" height="0.4"
+            event-set__dragover="material.color: #f0f; material.opacity: 0.8"
+            event-set__dragleave="material.color: #444; material.opacity: 1">
+        </a-plane>
+
+        <!-- Texto de instrucciones -->
+        <a-text value="Arrastra objetos a las zonas de drop" position="0 2.2 -1" align="center" color="#FFF"
+            width="2.5">
+        </a-text>
+
+        <a-text value="Gris: Todo | Negro: Solo cubo | Oscuro: Clase" position="0 2.05 -1.15" align="center"
+            color="#AAA" width="2">
+        </a-text>
+
+        <!-- Suelo -->
+        <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10" color="#7BC8A4">
+        </a-plane>
+
+        <!-- Iluminación -->
+        <a-light type="ambient" intensity="0.6"></a-light>
+        <a-light type="directional" intensity="0.5" position="1 2 1"></a-light>
+    </a-scene>
+</body>
+<script>
+    // Componente helper para cambiar color al hacer drop
+    AFRAME.registerComponent('drop-color', {
+        schema: {
+            color: { type: 'color', default: '#0f0' }
+        },
+
+        init: function () {
+            this.originalColor = this.el.getAttribute('color');
+
+            this.el.addEventListener('drag-drop', (e) => {
+                console.log('✅ Drop exitoso!', e.detail.dropped.id);
+                this.el.setAttribute('color', this.data.color);
+
+                // Restaurar después de 1 segundo
+                setTimeout(() => {
+                    this.el.setAttribute('color', this.originalColor);
+                }, 1000);
+            });
+        }
+    });
+
+    // Listener global para debug
+    document.addEventListener('DOMContentLoaded', () => {
+        const scene = document.querySelector('a-scene');
+
+        scene.addEventListener('drag-drop', (e) => {
+            console.log('🎯 DRAG-DROP GLOBAL:', {
+                droppable: e.target.id,
+                draggable: e.detail.dropped.id,
+                hand: e.detail.hand
+            });
+        });
+    });
+</script>
+
+</html>
