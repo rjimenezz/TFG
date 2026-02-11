@@ -2,6 +2,7 @@
  * Componente: stretchable
  * Permite escalar un objeto con dos manos mientras está agarrado.
  * Usa automáticamente el mismo tipo de colisionador que el detector de gesto.
+ * ✅ NUEVO: Añade automáticamente grabbable si no existe
  */
 AFRAME.registerComponent('stretchable', {
     schema: {
@@ -26,14 +27,50 @@ AFRAME.registerComponent('stretchable', {
 
         this.inContact = { left: false, right: false };
         this.isPinching = { left: false, right: false };
-        // ✅ NUEVO: Rastrear si el contacto fue DESPUÉS del pellizco
         this.validContactForStretch = { left: false, right: false };
 
-        if (this.sceneEl.hasLoaded) {
-            this._setup();
-        } else {
-            this.sceneEl.addEventListener('loaded', () => this._setup());
-        }
+        // ✅ NUEVO: Asegurar que tenga grabbable
+        this._ensureGrabbable().then(() => {
+            if (this.sceneEl.hasLoaded) {
+                this._setup();
+            } else {
+                this.sceneEl.addEventListener('loaded', () => this._setup());
+            }
+        });
+    },
+
+    // ✅ NUEVO: Método para asegurar que existe grabbable
+    _ensureGrabbable: function () {
+        return new Promise((resolve) => {
+            // Si ya tiene grabbable, resolver inmediatamente
+            if (this.el.components.grabbable) {
+                console.log('[stretchable] ✓ Ya tiene grabbable');
+                resolve();
+                return;
+            }
+
+            console.log('[stretchable] ➕ Añadiendo componente grabbable automáticamente...');
+
+            // Añadir grabbable con la misma configuración de gestos
+            this.el.setAttribute('grabbable', {
+                startGesture: this.data.startGesture,
+                endGesture: this.data.endGesture
+            });
+
+            // Esperar a que se inicialice grabbable
+            const checkGrabbable = () => {
+                if (this.el.components.grabbable) {
+                    console.log('[stretchable] ✅ Grabbable inicializado');
+                    resolve();
+                } else {
+                    // Reintentar en el siguiente frame
+                    requestAnimationFrame(checkGrabbable);
+                }
+            };
+
+            // Comenzar a verificar
+            requestAnimationFrame(checkGrabbable);
+        });
     },
 
     _setup: function () {
@@ -103,13 +140,10 @@ AFRAME.registerComponent('stretchable', {
             const hand = collidedWith.id.includes('left') ? 'left' : 'right';
             this.inContact[hand] = true;
 
-            // ✅ NUEVO: Solo válido si NO está pellizcando
             if (!this.isPinching[hand]) {
                 this.validContactForStretch[hand] = true;
-                console.log(`[stretchable] 🟢 CONTACTO VÁLIDO - Mano ${hand} (sin pellizco previo)`);
             } else {
                 this.validContactForStretch[hand] = false;
-                console.log(`[stretchable] 🟡 CONTACTO - Mano ${hand} (pero ya estaba pellizcando, NO válido para stretch)`);
             }
         }
     },
@@ -120,11 +154,8 @@ AFRAME.registerComponent('stretchable', {
             const hand = collidedWith.id.includes('left') ? 'left' : 'right';
             this.inContact[hand] = false;
             this.validContactForStretch[hand] = false;
-            console.log(`[stretchable] 🔴 SIN CONTACTO - Mano ${hand}`);
 
-            // ✅ ARREGLADO: Terminar stretch si pierde contacto
             if (this.stretching) {
-                console.log(`[stretchable] ⚠️ Stretch cancelado - Mano ${hand} perdió contacto`);
                 this._endStretch();
             }
         }
@@ -156,21 +187,15 @@ AFRAME.registerComponent('stretchable', {
                     this.inContact[hand] = handCollider.testCollision(objectOBB);
 
                     if (this.inContact[hand] && !wasInContact) {
-                        // ✅ NUEVO: Solo válido si NO está pellizcando
                         if (!this.isPinching[hand]) {
                             this.validContactForStretch[hand] = true;
-                            console.log(`[stretchable] 🟢 CONTACTO VÁLIDO - Mano ${hand} (sin pellizco previo)`);
                         } else {
                             this.validContactForStretch[hand] = false;
-                            console.log(`[stretchable] 🟡 CONTACTO - Mano ${hand} (pero ya estaba pellizcando, NO válido)`);
                         }
                     } else if (!this.inContact[hand] && wasInContact) {
                         this.validContactForStretch[hand] = false;
-                        console.log(`[stretchable] 🔴 SIN CONTACTO - Mano ${hand}`);
 
-                        // ✅ ARREGLADO: Terminar stretch si pierde contacto
                         if (this.stretching) {
-                            console.log(`[stretchable] ⚠️ Stretch cancelado - Mano ${hand} perdió contacto`);
                             this._endStretch();
                         }
                     }
@@ -181,7 +206,6 @@ AFRAME.registerComponent('stretchable', {
             });
         }
 
-        // ✅ ARREGLADO: Solo permite stretch si ambas manos tienen contacto VÁLIDO
         const bothCanStretch = this.inContact.left && this.inContact.right &&
             this.isPinching.left && this.isPinching.right &&
             this.validContactForStretch.left && this.validContactForStretch.right;
@@ -205,14 +229,8 @@ AFRAME.registerComponent('stretchable', {
         if (!hand) return;
         this.isPinching[hand] = true;
 
-        // ✅ NUEVO: Si hace contacto DESPUÉS de empezar a pellizcar, NO marcar como válido
         if (this.inContact[hand] && !this.validContactForStretch[hand]) {
-            console.log(`[stretchable] ⚠️ Pellizco iniciado CON contacto previo - Mano ${hand} - Se requiere re-contacto`);
             return;
-        }
-
-        if (this.inContact[hand] && this.validContactForStretch[hand]) {
-            console.log(`[stretchable] ✅ Pellizco válido para stretch - Mano ${hand}`);
         }
     },
 
@@ -221,16 +239,13 @@ AFRAME.registerComponent('stretchable', {
         if (!hand) return;
         this.isPinching[hand] = false;
 
-        // ✅ NUEVO: Al soltar pellizco, si sigue en contacto, marcar como válido
         if (this.inContact[hand]) {
             this.validContactForStretch[hand] = true;
-            console.log(`[stretchable] ✅ Pellizco terminado con contacto - Mano ${hand} - Listo para stretch`);
         } else {
             this.validContactForStretch[hand] = false;
         }
 
         if (this.stretching) {
-            console.log(`[stretchable] ⚠️ Stretch cancelado - Mano ${hand} soltó pellizco`);
             this._endStretch();
         }
     },
