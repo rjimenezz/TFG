@@ -1,0 +1,28 @@
+<head>
+    <title>Most Basic Super-Hands Example</title>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script>
+        delete AFRAME.components["grabbable"];
+    </script>
+    <script src="sat-collider.js"></script>
+    <script src="GestoPellizco.js"></script>
+    <script src="GestoApuntar.js"></script>
+    <script src="ManosEsferas.js"></script>
+    <script src="Hoverable.js"></script>
+    <script src="Grabbable.js"></script>
+    <script src="Stretchable.js"></script>
+    <script src="Draggable.js"></script>
+    <script src="Droppable.js"></script>
+
+<body>
+    <a-scene>
+        <a-assets></a-assets>
+        <a-entity>
+            <a-camera></a-camera>
+            <a-entity sphere-collider="objects: a-box" super-hands hand-controls="hand: left"></a-entity>
+            <a-entity sphere-collider="objects: a-box" super-hands hand-controls="hand: right"></a-entity>
+        </a-entity>
+        <!-- hover & drag-drop won't have any obvious effect without some additional event handlers or components. See the examples page for more -->
+        <a-box hoverable grabbable stretchable draggable droppable color="blue" position="0 1 -1"></a-box>
+    </a-scene>
+</body>
