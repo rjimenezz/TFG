@@ -201,7 +201,6 @@ AFRAME.registerComponent('grabbable', {
 
     if (!gestoComp?.getHandCollider) return;
 
-    // ✅ Safety extra: sincronizar con estado real de gesto-pellizco
     const pinchComp = this.detector.components['gesto-pellizco'];
     if (pinchComp?.state) {
       ['left', 'right'].forEach(hand => {
@@ -242,6 +241,12 @@ AFRAME.registerComponent('grabbable', {
         }
       });
     }
+    // ✅ Liberar TODOS los agarres de una mano si ya no cumple condiciones
+    ['left', 'right'].forEach(hand => {
+      if (!this.inContact[hand] || !this.isGesturing[hand]) {
+        this._releaseAllFromHand(hand);
+      }
+    });
 
     // Verificar agarres activos
     for (let i = this.grabbers.length - 1; i >= 0; i--) {
@@ -310,19 +315,22 @@ AFRAME.registerComponent('grabbable', {
 
     this.isGesturing[hand] = false;
 
-    // ✅ NUEVO: Al soltar pellizco, si sigue en contacto, marcar como válido para próximo grab
     if (this.inContact[hand]) {
       this.validContactForGrab[hand] = true;
       console.log(`[grabbable] ✅ Pellizco terminado con contacto - Mano ${hand} - Listo para nuevo grab`);
     }
 
-    const grabberIndex = this.grabbers.findIndex(g => g.hand === hand);
-    if (grabberIndex !== -1) {
-      this._releaseGrab(hand);
-    }
+    // ✅ Antes soltaba solo una entrada; ahora suelta todas las de esa mano
+    this._releaseAllFromHand(hand);
   },
 
   _startGrab: function (hand) {
+    // ✅ Evitar duplicados de la misma mano (bug de "pegado")
+    const alreadyGrabbedByHand = this.grabbers.some(g => g.hand === hand);
+    if (alreadyGrabbedByHand) {
+      return;
+    }
+
     const gestoComp = this.detector.components['gesto-pellizco'] ||
       this.detector.components['gesto-apuntar'];
 
@@ -387,7 +395,14 @@ AFRAME.registerComponent('grabbable', {
     console.log(`[grabbable] 🎯 AGARRADO por mano ${hand}`);
     this.el.emit('grab-start', { hand, grabbers: this.grabbers.length }, false);
   },
-
+  // ✅ NUEVO: liberar todas las entradas de una mano
+  _releaseAllFromHand: function (hand) {
+    let hasAny = this.grabbers.some(g => g.hand === hand);
+    while (hasAny) {
+      this._releaseGrab(hand);
+      hasAny = this.grabbers.some(g => g.hand === hand);
+    }
+  },
   _releaseGrab: function (hand) {
     const grabberIndex = this.grabbers.findIndex(g => g.hand === hand);
     if (grabberIndex === -1) return;
