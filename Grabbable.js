@@ -201,6 +201,16 @@ AFRAME.registerComponent('grabbable', {
 
     if (!gestoComp?.getHandCollider) return;
 
+    // ✅ Safety extra: sincronizar con estado real de gesto-pellizco
+    const pinchComp = this.detector.components['gesto-pellizco'];
+    if (pinchComp?.state) {
+      ['left', 'right'].forEach(hand => {
+        const realPinching = !!pinchComp.state[hand]?.pinching;
+        if (!realPinching && this.isGesturing[hand]) {
+          this.isGesturing[hand] = false;
+        }
+      });
+    }
     if (this.colliderType === 'sat-collider') {
       const objectCollider = this.el.components['sat-collider'];
       if (!objectCollider) return;
