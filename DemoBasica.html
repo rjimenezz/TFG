@@ -19,8 +19,16 @@
         <a-assets></a-assets>
         <a-entity>
             <a-camera></a-camera>
-            <a-entity sphere-collider="objects: a-box" super-hands hand-controls="hand: left"></a-entity>
-            <a-entity sphere-collider="objects: a-box" super-hands hand-controls="hand: right"></a-entity>
+        </a-entity>
+        <!-- Detectores de tus gestos -->
+        <a-entity id="detector-pellizco" gesto-pellizco="hand:any; emitEachFrame:true; colliderType:sat-collider;">
+        </a-entity>
+
+        <a-entity id="detector-apuntar" gesto-apuntar="hand:any; emitEachFrame:true; colliderType:sat-collider;">
+        </a-entity>
+
+        <!-- Visualización de manos con esferas -->
+        <a-entity manos-esferas="useJointRadius:true; colorLeft:#39f; colorRight:#f93; opacity:0.8;">
         </a-entity>
         <!-- hover & drag-drop won't have any obvious effect without some additional event handlers or components. See the examples page for more -->
         <a-box hoverable grabbable stretchable draggable droppable color="blue" position="0 1 -1"></a-box>
