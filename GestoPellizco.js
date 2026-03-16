@@ -98,12 +98,7 @@ AFRAME.registerComponent('gesto-pellizco', {
         if (!this.renderer) this.renderer = sceneEl.renderer;
 
         const session = this.renderer.xr.getSession();
-        if (!session) {
-            // ✅ Safety: si no hay sesión, resetear manos
-            this._resetHandState('left');
-            this._resetHandState('right');
-            return;
-        }
+        if (!session) return;
 
         const frame = sceneEl.frame;
         if (!frame) return;
@@ -113,37 +108,25 @@ AFRAME.registerComponent('gesto-pellizco', {
             if (!this.referenceSpace) return;
         }
 
-        // ✅ Marcar qué manos se han actualizado en este frame
-        const updated = { left: false, right: false };
-
         for (const inputSource of session.inputSources) {
             if (!inputSource.hand) continue;
 
             const handedness = inputSource.handedness;
             if (this.data.hand !== 'any' && handedness !== this.data.hand) continue;
-            if (handedness !== 'left' && handedness !== 'right') continue;
 
             const thumbJoint = inputSource.hand.get('thumb-tip');
             const indexJoint = inputSource.hand.get('index-finger-tip');
             const wristJoint = inputSource.hand.get('wrist');
             const middleTipJoint = inputSource.hand.get('middle-finger-tip');
 
-            if (!thumbJoint || !indexJoint || !wristJoint || !middleTipJoint) {
-                this._resetHandState(handedness);
-                continue;
-            }
+            if (!thumbJoint || !indexJoint || !wristJoint || !middleTipJoint) continue;
 
             const thumbPose = frame.getJointPose(thumbJoint, this.referenceSpace);
             const indexPose = frame.getJointPose(indexJoint, this.referenceSpace);
             const wristPose = frame.getJointPose(wristJoint, this.referenceSpace);
             const middleTipPose = frame.getJointPose(middleTipJoint, this.referenceSpace);
 
-            if (!thumbPose || !indexPose || !wristPose || !middleTipPose) {
-                this._resetHandState(handedness);
-                continue;
-            }
-
-            updated[handedness] = true;
+            if (!thumbPose || !indexPose || !wristPose || !middleTipPose) continue;
 
             const dx = thumbPose.transform.position.x - indexPose.transform.position.x;
             const dy = thumbPose.transform.position.y - indexPose.transform.position.y;
@@ -175,28 +158,6 @@ AFRAME.registerComponent('gesto-pellizco', {
             } else if (handState.pinching && this.data.emitEachFrame) {
                 this._emit('pinchmove', handedness, distance);
             }
-        }
-
-        // ✅ Si una mano no se actualizó en este frame, resetearla
-        if (!updated.left) this._resetHandState('left');
-        if (!updated.right) this._resetHandState('right');
-    },
-
-    // ✅ NUEVO
-    _resetHandState: function (handedness) {
-        const handState = this.state[handedness];
-        if (!handState) return;
-
-        if (handState.pinching) {
-            handState.pinching = false;
-            this._emit('pinchend', handedness, handState.lastDistance ?? 0);
-        }
-
-        handState.lastDistance = null;
-
-        // Mover collider lejos para evitar contactos fantasma
-        if (handState.colliderEntity) {
-            handState.colliderEntity.object3D.position.set(9999, 9999, 9999);
         }
     },
 

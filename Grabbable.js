@@ -37,6 +37,8 @@ AFRAME.registerComponent('grabbable', {
     this.originalY = null;
     this.inContact = { left: false, right: false };
     this.isGesturing = { left: false, right: false };
+    // ✅ NUEVO: parent estable al que volver cuando no quede ningún agarre
+    this.restParent = null;
     // ✅ NUEVO: Rastrear si el contacto fue DESPUÉS del pellizco
     this.validContactForGrab = { left: false, right: false };
 
@@ -201,15 +203,6 @@ AFRAME.registerComponent('grabbable', {
 
     if (!gestoComp?.getHandCollider) return;
 
-    const pinchComp = this.detector.components['gesto-pellizco'];
-    if (pinchComp?.state) {
-      ['left', 'right'].forEach(hand => {
-        const realPinching = !!pinchComp.state[hand]?.pinching;
-        if (!realPinching && this.isGesturing[hand]) {
-          this.isGesturing[hand] = false;
-        }
-      });
-    }
     if (this.colliderType === 'sat-collider') {
       const objectCollider = this.el.components['sat-collider'];
       if (!objectCollider) return;
@@ -241,12 +234,6 @@ AFRAME.registerComponent('grabbable', {
         }
       });
     }
-    // ✅ Liberar TODOS los agarres de una mano si ya no cumple condiciones
-    ['left', 'right'].forEach(hand => {
-      if (!this.inContact[hand] || !this.isGesturing[hand]) {
-        this._releaseAllFromHand(hand);
-      }
-    });
 
     // Verificar agarres activos
     for (let i = this.grabbers.length - 1; i >= 0; i--) {
@@ -315,22 +302,21 @@ AFRAME.registerComponent('grabbable', {
 
     this.isGesturing[hand] = false;
 
+    // ✅ NUEVO: Al soltar pellizco, si sigue en contacto, marcar como válido para próximo grab
     if (this.inContact[hand]) {
       this.validContactForGrab[hand] = true;
       console.log(`[grabbable] ✅ Pellizco terminado con contacto - Mano ${hand} - Listo para nuevo grab`);
     }
 
-    // ✅ Antes soltaba solo una entrada; ahora suelta todas las de esa mano
-    this._releaseAllFromHand(hand);
-  },
-
-  _startGrab: function (hand) {
-    // ✅ Evitar duplicados de la misma mano (bug de "pegado")
-    const alreadyGrabbedByHand = this.grabbers.some(g => g.hand === hand);
-    if (alreadyGrabbedByHand) {
-      return;
+    const grabberIndex = this.grabbers.findIndex(g => g.hand === hand);
+    if (grabberIndex !== -1) {
+      this._releaseGrab(hand);
     }
-
+  },
+  _isGrabberStillValid: function (hand) {
+    return !!(this.inContact[hand] && this.isGesturing[hand]);
+  },
+  _startGrab: function (hand) {
     const gestoComp = this.detector.components['gesto-pellizco'] ||
       this.detector.components['gesto-apuntar'];
 
@@ -339,7 +325,10 @@ AFRAME.registerComponent('grabbable', {
 
     const wasGrabbed = this.grabbers.length > 0;
 
-    const originalParent = this.el.object3D.parent;
+    // ✅ Guardar parent "real" solo en el primer agarre
+    if (!wasGrabbed) {
+      this.restParent = this.el.object3D.parent || this.sceneEl.object3D;
+    }
 
     const objWorldPos = new THREE.Vector3();
     const objWorldQuat = new THREE.Quaternion();
@@ -379,7 +368,6 @@ AFRAME.registerComponent('grabbable', {
     const grabData = {
       hand: hand,
       colliderEntity: handColliderEl,
-      originalParent: originalParent,
       localOffset: localPos.clone(),
       localRotation: this.el.object3D.quaternion.clone(),
       grabCenterWorld: objWorldPos.clone(),
@@ -395,14 +383,7 @@ AFRAME.registerComponent('grabbable', {
     console.log(`[grabbable] 🎯 AGARRADO por mano ${hand}`);
     this.el.emit('grab-start', { hand, grabbers: this.grabbers.length }, false);
   },
-  // ✅ NUEVO: liberar todas las entradas de una mano
-  _releaseAllFromHand: function (hand) {
-    let hasAny = this.grabbers.some(g => g.hand === hand);
-    while (hasAny) {
-      this._releaseGrab(hand);
-      hasAny = this.grabbers.some(g => g.hand === hand);
-    }
-  },
+
   _releaseGrab: function (hand) {
     const grabberIndex = this.grabbers.findIndex(g => g.hand === hand);
     if (grabberIndex === -1) return;
@@ -418,14 +399,11 @@ AFRAME.registerComponent('grabbable', {
       this.el.object3D.getWorldQuaternion(worldQuat);
       this.el.object3D.getWorldScale(worldScale);
 
-      if (grabData.originalParent) {
-        grabData.originalParent.add(this.el.object3D);
-      } else {
-        this.sceneEl.object3D.add(this.el.object3D);
-      }
+      // ✅ Usar parent estable, no el parent capturado por cada mano
+      const targetParent = this.restParent || this.sceneEl.object3D;
+      targetParent.add(this.el.object3D);
 
       const parentInverseMatrix = new THREE.Matrix4();
-      const targetParent = grabData.originalParent || this.sceneEl.object3D;
       parentInverseMatrix.copy(targetParent.matrixWorld).invert();
 
       const localPos = worldPos.clone().applyMatrix4(parentInverseMatrix);
@@ -439,13 +417,15 @@ AFRAME.registerComponent('grabbable', {
       this.el.object3D.scale.copy(worldScale);
 
       this.originalY = null;
+      this.restParent = null;
     } else {
-      // ✅ ARREGLADO: Transferir al PRIMER grabber restante (el más antiguo)
+      // ✅ Transferir solo a una mano que siga siendo válida
       const remainingGrabbers = this.grabbers.filter((g, i) => i !== grabberIndex);
-      const nextGrabber = remainingGrabbers[0]; // El más antiguo
+      const validRemaining = remainingGrabbers.filter(g => this._isGrabberStillValid(g.hand));
+      const nextGrabber = validRemaining[0] || null;
 
       if (nextGrabber) {
-        console.log(`[grabbable] 🔄 Transferir agarre de ${hand} a ${nextGrabber.hand} (primera mano)`);
+        console.log(`[grabbable] 🔄 Transferir agarre de ${hand} a ${nextGrabber.hand}`);
 
         const worldPos = new THREE.Vector3();
         const worldQuat = new THREE.Quaternion();
@@ -462,6 +442,31 @@ AFRAME.registerComponent('grabbable', {
         nextGrabber.colliderEntity.object3D.getWorldQuaternion(handWorldQuat);
         const handInverseQuat = handWorldQuat.clone().invert();
         this.el.object3D.quaternion.copy(handInverseQuat).multiply(worldQuat);
+      } else {
+        // ✅ No queda ninguna mano válida: soltar completamente ya
+        const worldPos = new THREE.Vector3();
+        const worldQuat = new THREE.Quaternion();
+        const worldScale = new THREE.Vector3();
+
+        this.el.object3D.getWorldPosition(worldPos);
+        this.el.object3D.getWorldQuaternion(worldQuat);
+        this.el.object3D.getWorldScale(worldScale);
+
+        const targetParent = this.restParent || this.sceneEl.object3D;
+        targetParent.add(this.el.object3D);
+
+        const parentInverseMatrix = new THREE.Matrix4();
+        parentInverseMatrix.copy(targetParent.matrixWorld).invert();
+        this.el.object3D.position.copy(worldPos).applyMatrix4(parentInverseMatrix);
+
+        const parentWorldQuat = new THREE.Quaternion();
+        targetParent.getWorldQuaternion(parentWorldQuat);
+        const parentInverseQuat = parentWorldQuat.clone().invert();
+        this.el.object3D.quaternion.copy(parentInverseQuat).multiply(worldQuat);
+
+        this.el.object3D.scale.copy(worldScale);
+        this.originalY = null;
+        this.restParent = null;
       }
     }
 
