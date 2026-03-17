@@ -1,393 +1,143 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 
 <head>
-    <title>AR Demo - Interacciones con Hand Tracking</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Demo Completa AR + Hand Tracking</title>
 
-    <!-- ✅ Usar A-Frame 1.7.1 para soporte de ar-hit-test -->
+    <!-- IMPORTANTE: 1.7.1 para ar-hit-test -->
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
 
-    <!-- Componentes personalizados -->
+    <!-- Si tienes otro grabbable cargado por librerías externas -->
+    <script>
+        if (AFRAME.components["grabbable"]) delete AFRAME.components["grabbable"];
+    </script>
+
+    <!-- Componentes del proyecto -->
     <script src="sat-collider.js"></script>
     <script src="GestoPellizco.js"></script>
     <script src="GestoApuntar.js"></script>
     <script src="ManosEsferas.js"></script>
+    <script src="Hoverable.js"></script>
     <script src="Grabbable.js"></script>
     <script src="Stretchable.js"></script>
-    <script src="Hoverable.js"></script>
-    <script src="Clickable.js"></script>
     <script src="Draggable.js"></script>
     <script src="Droppable.js"></script>
+    <script src="Clickable.js"></script>
 
     <style>
-        #instructions {
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        #ui {
             position: fixed;
             top: 10px;
             left: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 15px;
+            background: rgba(0, 0, 0, .75);
+            color: #fff;
+            padding: 10px 12px;
             border-radius: 8px;
-            font-family: Arial, sans-serif;
-            max-width: 300px;
-            z-index: 1000;
-        }
-
-        #instructions h3 {
-            margin-top: 0;
-            color: #4fc3f7;
-        }
-
-        #instructions ul {
-            margin: 10px 0;
-            padding-left: 20px;
-        }
-
-        #instructions li {
-            margin: 5px 0;
+            z-index: 10;
+            max-width: 360px;
+            line-height: 1.35;
+            font-size: 14px;
         }
     </style>
 </head>
 
 <body>
-    <!-- Instrucciones en pantalla -->
-    <div id="instructions">
-        <h3>🎮 AR Demo - Instrucciones</h3>
-        <ul>
-            <li><strong>📱 Móvil:</strong> Toca la pantalla para colocar objetos</li>
-            <li><strong>🥽 VR/AR:</strong> Apunta una superficie y haz pinch</li>
-            <li><strong>✊ Agarrar:</strong> Pinch sobre objeto</li>
-            <li><strong>🔀 Escalar:</strong> Pinch con ambas manos</li>
-            <li><strong>🎯 Click:</strong> Apunta con dedo índice</li>
-            <li><strong>📦 Drag & Drop:</strong> Arrastra objetos a zonas</li>
-        </ul>
+    <div id="ui">
+        <b>Demo AR</b><br />
+        1) Entra en modo AR y apunta a una superficie.<br />
+        2) Pulsa para colocar la escena (hit-test).<br />
+        3) Pinch para agarrar, 2 manos para stretch, índice para click.
     </div>
 
-    <a-scene
-        webxr="requiredFeatures: hit-test,local-floor; optionalFeatures: hand-tracking,dom-overlay; overlayElement:#instructions;"
-        ar-hit-test="target: #spawn-container; src: #reticle-img;" xr-mode-ui="enabled: true">
+    <a-scene xr-mode-ui="enabled: true"
+        webxr="requiredFeatures: hit-test,local-floor; optionalFeatures: hand-tracking,dom-overlay; overlayElement: #ui;"
+        ar-hit-test="target: #spawn-container; src: #reticle-img;">
 
-        <!-- ========== ASSETS ========== -->
         <a-assets>
-            <!-- Retícula para AR hit-test -->
-            <img id="reticle-img" src="https://cdn.glitch.global/ace41019-ea27-4bf3-932f-0166eb250d88/reticle.png">
-
-            <!-- Texturas de ejemplo -->
-            <img id="wood-texture" src="https://cdn.aframe.io/a-painter/images/floor.jpg">
-            <img id="metal-texture" src="https://cdn.aframe.io/a-painter/images/metal.jpg">
+            <img id="reticle-img" src="https://cdn.glitch.global/ace41019-ea27-4bf3-932f-0166eb250d88/reticle.png" />
         </a-assets>
 
-        <!-- ========== DETECTORES DE GESTOS ========== -->
-
-        <!-- Detector de pellizco para agarre y stretch -->
-        <a-entity id="detector-pellizco" gesto-pellizco="
-                hand: any;
-                startDistance: 0.025;
-                endDistance: 0.035;
-                emitEachFrame: true;
-                colliderSize: 0.12 0.08 0.18;
-                debugCollider: false;
-                colliderType: obb-collider">
+        <!-- Detectores -->
+        <a-entity id="detector-pellizco"
+            gesto-pellizco="hand:any; emitEachFrame:true; colliderType:obb-collider; debugCollider:false;">
         </a-entity>
 
-        <!-- Detector de apuntar para clicks -->
-        <a-entity id="detector-apuntar" gesto-apuntar="
-                hand: any;
-                indexExtendedThreshold: 0.06;
-                otherFingersThreshold: 0.08;
-                emitEachFrame: true;
-                colliderSize: 0.08 0.08 0.12;
-                debugCollider: false;
-                colliderType: obb-collider">
+        <a-entity id="detector-apuntar"
+            gesto-apuntar="hand:any; emitEachFrame:true; colliderType:obb-collider; debugCollider:false;">
         </a-entity>
 
-        <!-- Visualización de manos -->
-        <a-entity manos-esferas="
-            useJointRadius: true;
-            colorLeft: #39f;
-            colorRight: #f93;
-            opacity: 0.7;
-            labels: false">
+        <a-entity manos-esferas="useJointRadius:true; colorLeft:#39f; colorRight:#f93; opacity:0.75;"></a-entity>
+
+        <!-- Cámara -->
+        <a-entity>
+            <a-camera position="0 1.6 0"></a-camera>
         </a-entity>
 
-        <!-- ========== CONTENEDOR PRINCIPAL (se coloca con AR) ========== -->
+        <!-- Contenido a colocar con hit-test -->
         <a-entity id="spawn-container" anchored="persistent: true" visible="false">
-
-            <!-- ===== OBJETOS INTERACTIVOS ===== -->
-
-            <!-- 1. Cubo rojo - Grabbable + Stretchable + Hoverable -->
-            <a-box id="cubo-rojo" position="-0.3 0.15 0" width="0.15" height="0.15" depth="0.15" color="#e74c3c"
-                grabbable="maxGrabbers: 2" stretchable="minScale: 0.5; maxScale: 3" hoverable>
+            <!-- Objeto principal: usa varios componentes -->
+            <a-box id="objeto-principal" position="0 0.12 0" width="0.22" height="0.22" depth="0.22" color="#4CC3D9"
+                hoverable grabbable="maxGrabbers:2" stretchable="minScale:0.4; maxScale:2.2" draggable>
             </a-box>
 
-            <!-- 2. Esfera azul - Draggable (con etiqueta) -->
-            <a-entity id="esfera-container" position="0 0.15 0">
-                <a-sphere id="esfera-azul" radius="0.08" color="#3498db" draggable grabbable>
-                </a-sphere>
-                <a-text value="Drag me!" position="0 0.15 0" align="center" color="#fff" scale="0.3 0.3 0.3">
-                </a-text>
-            </a-entity>
-
-            <!-- 3. Cilindro verde - Clickable + Grabbable -->
-            <a-cylinder id="cilindro-verde" position="0.3 0.1 0" radius="0.06" height="0.2" color="#2ecc71"
-                clickable="startGesture: pointstart; endGesture: pointend" grabbable>
+            <!-- Botón clickable -->
+            <a-cylinder id="btn-click" position="-0.35 0.08 0" radius="0.06" height="0.06" color="#2ecc71"
+                clickable="startGesture:pointstart; endGesture:pointend">
             </a-cylinder>
 
-            <!-- 4. Panel interactivo con botones -->
-            <a-entity id="panel-botones" position="0 0.35 0">
-                <!-- Fondo del panel -->
-                <a-plane width="0.8" height="0.25" color="#34495e" opacity="0.9">
-                </a-plane>
-
-                <!-- Botón 1: Rojo -->
-                <a-box id="boton-rojo" position="-0.25 0 0.01" width="0.12" height="0.12" depth="0.02" color="#e74c3c"
-                    clickable="startGesture: pointstart; endGesture: pointend">
-                </a-box>
-                <a-text value="Reset" position="-0.25 -0.08 0.02" align="center" color="#fff"
-                    scale="0.2 0.2 0.2"></a-text>
-
-                <!-- Botón 2: Verde -->
-                <a-box id="boton-verde" position="0 0 0.01" width="0.12" height="0.12" depth="0.02" color="#2ecc71"
-                    clickable="startGesture: pointstart; endGesture: pointend">
-                </a-box>
-                <a-text value="Spawn" position="0 -0.08 0.02" align="center" color="#fff" scale="0.2 0.2 0.2"></a-text>
-
-                <!-- Botón 3: Azul -->
-                <a-box id="boton-azul" position="0.25 0 0.01" width="0.12" height="0.12" depth="0.02" color="#3498db"
-                    clickable="startGesture: pointstart; endGesture: pointend">
-                </a-box>
-                <a-text value="Clear" position="0.25 -0.08 0.02" align="center" color="#fff"
-                    scale="0.2 0.2 0.2"></a-text>
-
-                <!-- Título del panel -->
-                <a-text value="Control Panel" position="0 0.1 0.02" align="center" color="#ecf0f1"
-                    scale="0.25 0.25 0.25">
-                </a-text>
-            </a-entity>
-
-            <!-- ===== ZONAS DROPPABLE ===== -->
-
-            <!-- Zona 1: Acepta cualquier objeto -->
-            <a-plane id="zona-general" position="-0.3 0 -0.2" width="0.25" height="0.25" rotation="-90 0 0"
-                color="#95a5a6" droppable="acceptEvent: objeto-colocado" material="opacity: 0.8; transparent: true">
+            <!-- Zona droppable -->
+            <a-plane id="drop-zone" position="0.35 0.005 0" rotation="-90 0 0" width="0.25" height="0.25" color="#888"
+                material="opacity:0.8; transparent:true" droppable>
             </a-plane>
-            <a-text value="Any Object" position="-0.3 0.01 -0.2" rotation="-90 0 0" align="center" color="#2c3e50"
-                scale="0.15 0.15 0.15">
-            </a-text>
 
-            <!-- Zona 2: Solo acepta la esfera azul -->
-            <a-plane id="zona-esfera" position="0 0 -0.2" width="0.25" height="0.25" rotation="-90 0 0" color="#3498db"
-                droppable="accepts: #esfera-azul; acceptEvent: esfera-correcta; rejectEvent: esfera-incorrecta"
-                material="opacity: 0.8; transparent: true">
-            </a-plane>
-            <a-text value="Blue Sphere Only" position="0 0.01 -0.2" rotation="-90 0 0" align="center" color="#fff"
-                scale="0.12 0.12 0.12">
-            </a-text>
-
-            <!-- Zona 3: Solo acepta el cubo rojo -->
-            <a-plane id="zona-cubo" position="0.3 0 -0.2" width="0.25" height="0.25" rotation="-90 0 0" color="#e74c3c"
-                droppable="accepts: #cubo-rojo; acceptEvent: cubo-correcto; rejectEvent: cubo-incorrecto"
-                material="opacity: 0.8; transparent: true">
-            </a-plane>
-            <a-text value="Red Cube Only" position="0.3 0.01 -0.2" rotation="-90 0 0" align="center" color="#fff"
-                scale="0.12 0.12 0.12">
-            </a-text>
-
-            <!-- ===== OBJETO SPAWNABLE ===== -->
-            <a-entity id="spawn-point" position="0 0.45 0" visible="false">
-                <!-- Template para objetos generados -->
-            </a-entity>
-
-            <!-- Plataforma base -->
-            <a-plane width="1.2" height="0.8" rotation="-90 0 0" src="#wood-texture" repeat="2 2">
-            </a-plane>
+            <!-- Base visual -->
+            <a-plane position="0 0 0" rotation="-90 0 0" width="1.2" height="1.2" color="#555"></a-plane>
         </a-entity>
 
-        <!-- ========== ILUMINACIÓN ========== -->
-        <a-light type="ambient" intensity="0.5"></a-light>
-        <a-light type="directional" position="1 2 1" intensity="0.8"></a-light>
-
+        <a-light type="ambient" intensity="0.7"></a-light>
+        <a-light type="directional" intensity="0.7" position="1 2 1"></a-light>
     </a-scene>
 
-    <!-- ========== LÓGICA DE LA APLICACIÓN ========== -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const scene = document.querySelector('a-scene');
-            const spawnContainer = document.getElementById('spawn-container');
-            const spawnPoint = document.getElementById('spawn-point');
-
-            let objectCounter = 0;
-
-            // ===== AR HIT-TEST: Mostrar container cuando se encuentre superficie =====
-            scene.addEventListener('ar-hit-test-start', () => {
-                console.log('🎯 AR Hit-test activo');
-            });
+            const root = document.getElementById('spawn-container');
+            const box = document.getElementById('objeto-principal');
+            const btn = document.getElementById('btn-click');
+            const zone = document.getElementById('drop-zone');
 
             scene.addEventListener('ar-hit-test-select', () => {
-                console.log('✅ Superficie seleccionada, mostrando objetos');
-                spawnContainer.setAttribute('visible', true);
+                root.setAttribute('visible', true);
             });
 
-            // ===== BOTÓN ROJO: Reset posiciones =====
-            const botonRojo = document.getElementById('boton-rojo');
-            botonRojo.addEventListener('click-start', () => {
-                console.log('🔴 Reset activado');
-                botonRojo.setAttribute('scale', '1.1 1.1 1.1');
+            // Hover feedback
+            box.addEventListener('hover-start', () => box.setAttribute('color', '#FFD54F'));
+            box.addEventListener('hover-end', () => box.setAttribute('color', '#4CC3D9'));
 
-                // Resetear posiciones originales
-                document.getElementById('cubo-rojo').setAttribute('position', '-0.3 0.15 0');
-                document.getElementById('esfera-container').setAttribute('position', '0 0.15 0');
-                document.getElementById('cilindro-verde').setAttribute('position', '0.3 0.1 0');
+            // Grab feedback
+            box.addEventListener('grab-start', () => box.setAttribute('material', 'emissive', '#ffffff'));
+            box.addEventListener('grab-end', () => box.setAttribute('material', 'emissive', '#000000'));
 
-                // Resetear escalas
-                document.getElementById('cubo-rojo').setAttribute('scale', '1 1 1');
+            // Click feedback
+            btn.addEventListener('click-start', () => {
+                btn.setAttribute('color', '#f1c40f');
+                box.setAttribute('color', '#e74c3c');
             });
+            btn.addEventListener('click-end', () => btn.setAttribute('color', '#2ecc71'));
 
-            botonRojo.addEventListener('click-end', () => {
-                botonRojo.setAttribute('scale', '1 1 1');
+            // Drop feedback
+            zone.addEventListener('drag-drop', () => {
+                zone.setAttribute('color', '#2ecc71');
+                setTimeout(() => zone.setAttribute('color', '#888'), 800);
             });
-
-            // ===== BOTÓN VERDE: Spawn objeto aleatorio =====
-            const botonVerde = document.getElementById('boton-verde');
-            botonVerde.addEventListener('click-start', () => {
-                console.log('🟢 Spawn activado');
-                botonVerde.setAttribute('scale', '1.1 1.1 1.1');
-
-                objectCounter++;
-                const shapes = ['box', 'sphere', 'cylinder'];
-                const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'];
-                const shape = shapes[Math.floor(Math.random() * shapes.length)];
-                const color = colors[Math.floor(Math.random() * colors.length)];
-
-                const newObj = document.createElement(`a-${shape}`);
-                newObj.setAttribute('id', `spawned-${objectCounter}`);
-                newObj.setAttribute('position', `${(Math.random() - 0.5) * 0.4} 0.45 ${(Math.random() - 0.5) * 0.3}`);
-                newObj.setAttribute('color', color);
-                newObj.setAttribute('grabbable', '');
-                newObj.setAttribute('draggable', '');
-
-                if (shape === 'box') {
-                    newObj.setAttribute('width', 0.1);
-                    newObj.setAttribute('height', 0.1);
-                    newObj.setAttribute('depth', 0.1);
-                } else if (shape === 'sphere') {
-                    newObj.setAttribute('radius', 0.05);
-                } else {
-                    newObj.setAttribute('radius', 0.04);
-                    newObj.setAttribute('height', 0.12);
-                }
-
-                spawnContainer.appendChild(newObj);
-                console.log(`✨ Objeto creado: ${shape} ${color}`);
-            });
-
-            botonVerde.addEventListener('click-end', () => {
-                botonVerde.setAttribute('scale', '1 1 1');
-            });
-
-            // ===== BOTÓN AZUL: Clear objetos spawneados =====
-            const botonAzul = document.getElementById('boton-azul');
-            botonAzul.addEventListener('click-start', () => {
-                console.log('🔵 Clear activado');
-                botonAzul.setAttribute('scale', '1.1 1.1 1.1');
-
-                // Eliminar todos los objetos spawneados
-                const spawned = spawnContainer.querySelectorAll('[id^="spawned-"]');
-                spawned.forEach(obj => obj.remove());
-                objectCounter = 0;
-
-                console.log('🗑️ Objetos spawneados eliminados');
-            });
-
-            botonAzul.addEventListener('click-end', () => {
-                botonAzul.setAttribute('scale', '1 1 1');
-            });
-
-            // ===== HOVER: Efecto visual =====
-            document.querySelectorAll('[hoverable]').forEach(el => {
-                const originalColor = el.getAttribute('color');
-
-                el.addEventListener('hover-start', (e) => {
-                    console.log(`👆 Hover: ${el.id} con ${e.detail.hand}`);
-                    el.setAttribute('color', '#ff0');
-                });
-
-                el.addEventListener('hover-end', () => {
-                    el.setAttribute('color', originalColor);
-                });
-            });
-
-            // ===== GRAB: Feedback =====
-            document.querySelectorAll('[grabbable]').forEach(el => {
-                el.addEventListener('grab-start', (e) => {
-                    console.log(`✊ Agarrado: ${el.id} con ${e.detail.hand}`);
-                    el.setAttribute('material', 'emissive', '#fff');
-                    el.setAttribute('material', 'emissiveIntensity', 0.3);
-                });
-
-                el.addEventListener('grab-end', (e) => {
-                    console.log(`🖐️ Soltado: ${el.id}`);
-                    el.setAttribute('material', 'emissive', '#000');
-                    el.setAttribute('material', 'emissiveIntensity', 0);
-                });
-            });
-
-            // ===== STRETCH: Feedback =====
-            document.querySelectorAll('[stretchable]').forEach(el => {
-                el.addEventListener('stretch-start', () => {
-                    console.log(`🔀 Stretch iniciado: ${el.id}`);
-                    el.setAttribute('material', 'wireframe', true);
-                });
-
-                el.addEventListener('stretch-end', (e) => {
-                    console.log(`🔀 Stretch terminado: ${el.id}, escala final:`, e.detail.finalScale);
-                    el.setAttribute('material', 'wireframe', false);
-                });
-            });
-
-            // ===== DROPPABLE: Feedback visual =====
-            const zonaDrop = document.getElementById('zona-esfera');
-            zonaDrop.addEventListener('esfera-correcta', (e) => {
-                console.log('✅ ¡Esfera colocada correctamente!');
-                zonaDrop.setAttribute('color', '#2ecc71');
-                setTimeout(() => zonaDrop.setAttribute('color', '#3498db'), 1000);
-            });
-
-            zonaDrop.addEventListener('esfera-incorrecta', (e) => {
-                console.log('❌ ¡Objeto incorrecto en zona de esfera!');
-                zonaDrop.setAttribute('color', '#e74c3c');
-                setTimeout(() => zonaDrop.setAttribute('color', '#3498db'), 1000);
-            });
-
-            const zonaCubo = document.getElementById('zona-cubo');
-            zonaCubo.addEventListener('cubo-correcto', (e) => {
-                console.log('✅ ¡Cubo colocado correctamente!');
-                zonaCubo.setAttribute('color', '#2ecc71');
-                setTimeout(() => zonaCubo.setAttribute('color', '#e74c3c'), 1000);
-            });
-
-            zonaCubo.addEventListener('cubo-incorrecto', (e) => {
-                console.log('❌ ¡Objeto incorrecto en zona de cubo!');
-                zonaCubo.setAttribute('color', '#95a5a6');
-                setTimeout(() => zonaCubo.setAttribute('color', '#e74c3c'), 1000);
-            });
-
-            // ===== CLICK EN CILINDRO: Rotar =====
-            const cilindro = document.getElementById('cilindro-verde');
-            cilindro.addEventListener('click-start', () => {
-                console.log('🔄 Rotando cilindro');
-                const currentRotation = cilindro.getAttribute('rotation');
-                cilindro.setAttribute('animation', {
-                    property: 'rotation',
-                    to: `${currentRotation.x} ${currentRotation.y + 90} ${currentRotation.z}`,
-                    dur: 500,
-                    easing: 'easeInOutQuad'
-                });
-            });
-
-            console.log('🎮 AR Demo inicializada correctamente');
         });
     </script>
 </body>
