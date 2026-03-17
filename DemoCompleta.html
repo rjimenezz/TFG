@@ -6,15 +6,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Demo Completa AR + Hand Tracking</title>
 
-    <!-- IMPORTANTE: 1.7.1 para ar-hit-test -->
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
 
-    <!-- Si tienes otro grabbable cargado por librerías externas -->
     <script>
-        if (AFRAME.components["grabbable"]) delete AFRAME.components["grabbable"];
+        delete AFRAME.components["grabbable"];
     </script>
 
-    <!-- Componentes del proyecto -->
     <script src="sat-collider.js"></script>
     <script src="GestoPellizco.js"></script>
     <script src="GestoApuntar.js"></script>
@@ -57,13 +54,9 @@
         3) Pinch para agarrar, 2 manos para stretch, índice para click.
     </div>
 
-    <a-scene xr-mode-ui="enabled: true"
-        webxr="requiredFeatures: hit-test,local-floor; optionalFeatures: hand-tracking,dom-overlay; overlayElement: #ui;"
-        ar-hit-test="target: #spawn-container; src: #reticle-img;">
-
-        <a-assets>
-            <img id="reticle-img" src="https://cdn.glitch.global/ace41019-ea27-4bf3-932f-0166eb250d88/reticle.png" />
-        </a-assets>
+    <a-scene xr-mode-ui="XRMode: xr"
+        webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: hand-tracking, dom-overlay; overlayElement: #ui;"
+        ar-hit-test="target: #spawn-container">
 
         <!-- Detectores -->
         <a-entity id="detector-pellizco"
@@ -76,29 +69,21 @@
 
         <a-entity manos-esferas="useJointRadius:true; colorLeft:#39f; colorRight:#f93; opacity:0.75;"></a-entity>
 
-        <!-- Cámara -->
-        <a-entity>
-            <a-camera position="0 1.6 0"></a-camera>
-        </a-entity>
+        <a-entity><a-camera position="0 1.6 0"></a-camera></a-entity>
 
-        <!-- Contenido a colocar con hit-test -->
         <a-entity id="spawn-container" anchored="persistent: true" visible="false">
-            <!-- Objeto principal: usa varios componentes -->
             <a-box id="objeto-principal" position="0 0.12 0" width="0.22" height="0.22" depth="0.22" color="#4CC3D9"
                 hoverable grabbable="maxGrabbers:2" stretchable="minScale:0.4; maxScale:2.2" draggable>
             </a-box>
 
-            <!-- Botón clickable -->
             <a-cylinder id="btn-click" position="-0.35 0.08 0" radius="0.06" height="0.06" color="#2ecc71"
                 clickable="startGesture:pointstart; endGesture:pointend">
             </a-cylinder>
 
-            <!-- Zona droppable -->
             <a-plane id="drop-zone" position="0.35 0.005 0" rotation="-90 0 0" width="0.25" height="0.25" color="#888"
                 material="opacity:0.8; transparent:true" droppable>
             </a-plane>
 
-            <!-- Base visual -->
             <a-plane position="0 0 0" rotation="-90 0 0" width="1.2" height="1.2" color="#555"></a-plane>
         </a-entity>
 
@@ -114,26 +99,19 @@
             const btn = document.getElementById('btn-click');
             const zone = document.getElementById('drop-zone');
 
-            scene.addEventListener('ar-hit-test-select', () => {
-                root.setAttribute('visible', true);
-            });
+            scene.addEventListener('ar-hit-test-select', () => root.setAttribute('visible', true));
 
-            // Hover feedback
             box.addEventListener('hover-start', () => box.setAttribute('color', '#FFD54F'));
             box.addEventListener('hover-end', () => box.setAttribute('color', '#4CC3D9'));
-
-            // Grab feedback
             box.addEventListener('grab-start', () => box.setAttribute('material', 'emissive', '#ffffff'));
             box.addEventListener('grab-end', () => box.setAttribute('material', 'emissive', '#000000'));
 
-            // Click feedback
             btn.addEventListener('click-start', () => {
                 btn.setAttribute('color', '#f1c40f');
                 box.setAttribute('color', '#e74c3c');
             });
             btn.addEventListener('click-end', () => btn.setAttribute('color', '#2ecc71'));
 
-            // Drop feedback
             zone.addEventListener('drag-drop', () => {
                 zone.setAttribute('color', '#2ecc71');
                 setTimeout(() => zone.setAttribute('color', '#888'), 800);
