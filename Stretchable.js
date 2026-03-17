@@ -172,39 +172,8 @@ AFRAME.registerComponent('stretchable', {
             return;
         }
 
-        if (this.colliderType === 'sat-collider') {
-            const objectCollider = this.el.components['sat-collider'];
-            if (!objectCollider) return;
-
-            if (objectCollider.updateOBB) objectCollider.updateOBB();
-
-            ['left', 'right'].forEach(hand => {
-                const handCollider = gestoComp.getHandCollider(hand);
-                const wasInContact = this.inContact[hand];
-
-                if (handCollider) {
-                    const objectOBB = objectCollider.getOBB();
-                    this.inContact[hand] = handCollider.testCollision(objectOBB);
-
-                    if (this.inContact[hand] && !wasInContact) {
-                        if (!this.isPinching[hand]) {
-                            this.validContactForStretch[hand] = true;
-                        } else {
-                            this.validContactForStretch[hand] = false;
-                        }
-                    } else if (!this.inContact[hand] && wasInContact) {
-                        this.validContactForStretch[hand] = false;
-
-                        if (this.stretching) {
-                            this._endStretch();
-                        }
-                    }
-                } else {
-                    this.inContact[hand] = false;
-                    this.validContactForStretch[hand] = false;
-                }
-            });
-        }
+        // ✅ IMPORTANTE: recalcular contacto cada frame para SAT y OBB
+        this._refreshContacts(gestoComp);
 
         const bothCanStretch = this.inContact.left && this.inContact.right &&
             this.isPinching.left && this.isPinching.right &&
@@ -233,6 +202,41 @@ AFRAME.registerComponent('stretchable', {
             return;
         }
     },
+    // ✅ NUEVO: fuente de verdad de contacto por frame (evita estados fantasma en OBB real)
+    _refreshContacts: function (gestoComp) {
+        let objectOBB = null;
+
+        if (this.colliderType === 'sat-collider') {
+            const objectCollider = this.el.components['sat-collider'];
+            if (!objectCollider) return;
+            if (objectCollider.updateOBB) objectCollider.updateOBB();
+            objectOBB = objectCollider.getOBB();
+        } else {
+            const objectCollider = this.el.components['obb-collider'];
+            if (!objectCollider || !objectCollider.obb) return;
+            objectOBB = objectCollider.obb;
+        }
+
+        ['left', 'right'].forEach(hand => {
+            const handCollider = gestoComp.getHandCollider(hand);
+            const wasInContact = this.inContact[hand];
+            let nowInContact = false;
+
+            if (handCollider && handCollider.testCollision) {
+                nowInContact = handCollider.testCollision(objectOBB);
+            }
+
+            this.inContact[hand] = nowInContact;
+
+            if (nowInContact && !wasInContact) {
+                // contacto nuevo: solo válido si NO estaba ya pellizcando
+                this.validContactForStretch[hand] = !this.isPinching[hand];
+            } else if (!nowInContact && wasInContact) {
+                this.validContactForStretch[hand] = false;
+                if (this.stretching) this._endStretch();
+            }
+        });
+    },
 
     _onGestureEnd: function (e) {
         const hand = e.detail && e.detail.hand;
@@ -258,10 +262,24 @@ AFRAME.registerComponent('stretchable', {
         this.el.object3D.getWorldQuaternion(this.fixedWorldQuat);
 
         this.initialScale = this.el.object3D.scale.clone();
-        this.initialDistance = null;
         this.baseColliderSize = null;
 
-        // ✅ Para SAT guardamos el tamaño actual del collider al iniciar el stretch
+        // ✅ Fijar distancia inicial inmediatamente al arrancar (evita saltos)
+        const gestoComp = this.detector.components['gesto-pellizco'] ||
+            this.detector.components['gesto-apuntar'];
+        const collider1 = gestoComp?.state?.left?.colliderEntity;
+        const collider2 = gestoComp?.state?.right?.colliderEntity;
+
+        if (collider1 && collider2) {
+            const p1 = new THREE.Vector3();
+            const p2 = new THREE.Vector3();
+            collider1.object3D.getWorldPosition(p1);
+            collider2.object3D.getWorldPosition(p2);
+            this.initialDistance = p1.distanceTo(p2);
+        } else {
+            this.initialDistance = null;
+        }
+
         if (this.colliderType === 'sat-collider') {
             const objectCollider = this.el.components['sat-collider'];
             if (objectCollider?.data?.size) {
@@ -296,7 +314,7 @@ AFRAME.registerComponent('stretchable', {
 
         const currentDistance = pos1.distanceTo(pos2);
 
-        if (this.initialDistance === null) {
+        if (this.initialDistance === null || this.initialDistance < 1e-6) {
             this.initialDistance = currentDistance;
             return;
         }
