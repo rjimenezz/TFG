@@ -7,10 +7,7 @@
     <title>Demo Completa AR + Hand Tracking</title>
 
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
-
-    <script>
-        delete AFRAME.components["grabbable"];
-    </script>
+    <script>delete AFRAME.components["grabbable"];</script>
 
     <script src="sat-collider.js"></script>
     <script src="GestoPellizco.js"></script>
@@ -32,26 +29,50 @@
 
         #ui {
             position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, .75);
-            color: #fff;
-            padding: 10px 12px;
-            border-radius: 8px;
+            top: 12px;
+            left: 12px;
             z-index: 10;
-            max-width: 360px;
+            background: rgba(0, 0, 0, .78);
+            color: #fff;
+            border-radius: 10px;
+            padding: 12px 14px;
+            max-width: 380px;
             line-height: 1.35;
-            font-size: 14px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+        }
+
+        #badge {
+            display: inline-block;
+            background: #2ecc71;
+            color: #111;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-bottom: 6px;
+        }
+
+        #title {
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        #step {
+            color: #9ad0ff;
+            margin-bottom: 4px;
+        }
+
+        #hint {
+            color: #f2f2f2;
         }
     </style>
 </head>
 
 <body>
     <div id="ui">
-        <b>Demo AR</b><br />
-        1) Entra en modo AR y apunta a una superficie.<br />
-        2) Pulsa para colocar la escena (hit-test).<br />
-        3) Pinch para agarrar, 2 manos para stretch, índice para click.
+        <div id="badge">DEMO AR</div>
+        <div id="title">Interacción con manos</div>
+        <div id="step">Paso 1/5</div>
+        <div id="hint">Entra en AR y toca para colocar la escena sobre una superficie.</div>
     </div>
 
     <a-scene xr-mode-ui="XRMode: xr"
@@ -71,24 +92,32 @@
 
         <a-entity><a-camera position="0 1.6 0"></a-camera></a-entity>
 
+        <!-- Contenido colocado con hit-test -->
         <a-entity id="spawn-container" anchored="persistent: true" visible="false">
-            <a-box id="objeto-principal" position="0 0.12 0" width="0.22" height="0.22" depth="0.22" color="#4CC3D9"
-                hoverable grabbable="maxGrabbers:2" stretchable="minScale:0.4; maxScale:2.2" draggable>
-            </a-box>
+            <a-plane position="0 0 0" rotation="-90 0 0" width="1.2" height="1.2" color="#555"></a-plane>
 
+            <a-entity position="0 0.01 0.35"
+                text="value: Suelta aquí (Drop Zone); align: center; color: #ffffff; width: 1.2"></a-entity>
+            <a-plane id="drop-zone" position="0.35 0.005 0" rotation="-90 0 0" width="0.25" height="0.25" color="#888"
+                material="opacity:0.85; transparent:true" droppable>
+            </a-plane>
+
+            <a-entity position="-0.35 0.18 0"
+                text="value: Botón (apuntar); align: center; color: #ffffff; width: 1.2"></a-entity>
             <a-cylinder id="btn-click" position="-0.35 0.08 0" radius="0.06" height="0.06" color="#2ecc71"
+                animation="property: scale; dir: alternate; loop: true; dur: 700; to: 1.08 1.08 1.08"
                 clickable="startGesture:pointstart; endGesture:pointend">
             </a-cylinder>
 
-            <a-plane id="drop-zone" position="0.35 0.005 0" rotation="-90 0 0" width="0.25" height="0.25" color="#888"
-                material="opacity:0.8; transparent:true" droppable>
-            </a-plane>
-
-            <a-plane position="0 0 0" rotation="-90 0 0" width="1.2" height="1.2" color="#555"></a-plane>
+            <a-entity position="0 0.28 0"
+                text="value: Cubo (grab + stretch + drag); align: center; color: #ffffff; width: 1.5"></a-entity>
+            <a-box id="objeto-principal" position="0 0.12 0" width="0.22" height="0.22" depth="0.22" color="#4CC3D9"
+                hoverable grabbable="maxGrabbers:2" stretchable="minScale:0.4; maxScale:2.2" draggable>
+            </a-box>
         </a-entity>
 
-        <a-light type="ambient" intensity="0.7"></a-light>
-        <a-light type="directional" intensity="0.7" position="1 2 1"></a-light>
+        <a-light type="ambient" intensity="0.72"></a-light>
+        <a-light type="directional" intensity="0.8" position="1 2 1"></a-light>
     </a-scene>
 
     <script>
@@ -99,23 +128,76 @@
             const btn = document.getElementById('btn-click');
             const zone = document.getElementById('drop-zone');
 
-            scene.addEventListener('ar-hit-test-select', () => root.setAttribute('visible', true));
+            const stepEl = document.getElementById('step');
+            const hintEl = document.getElementById('hint');
 
+            const progress = { placed: false, grabbed: false, stretched: false, clicked: false, dropped: false };
+
+            function refreshGuide() {
+                if (!progress.placed) {
+                    stepEl.textContent = 'Paso 1/5';
+                    hintEl.textContent = 'Entra en AR y toca para colocar la escena sobre una superficie.';
+                } else if (!progress.grabbed) {
+                    stepEl.textContent = 'Paso 2/5';
+                    hintEl.textContent = 'Haz pellizco tocando el cubo para agarrarlo.';
+                } else if (!progress.stretched) {
+                    stepEl.textContent = 'Paso 3/5';
+                    hintEl.textContent = 'Con 2 manos, pellizca el cubo para cambiar su tamaño.';
+                } else if (!progress.clicked) {
+                    stepEl.textContent = 'Paso 4/5';
+                    hintEl.textContent = 'Apunta con el índice al botón verde para activarlo.';
+                } else if (!progress.dropped) {
+                    stepEl.textContent = 'Paso 5/5';
+                    hintEl.textContent = 'Arrastra el cubo y suéltalo sobre la zona gris.';
+                } else {
+                    stepEl.textContent = 'Completado';
+                    hintEl.textContent = 'Demo terminada. Puedes repetir libremente.';
+                }
+            }
+
+            // Paso 1: colocación AR
+            scene.addEventListener('ar-hit-test-select', () => {
+                root.setAttribute('visible', true);
+                progress.placed = true;
+                refreshGuide();
+            });
+
+            // Feedback hover/grab/stretch
             box.addEventListener('hover-start', () => box.setAttribute('color', '#FFD54F'));
             box.addEventListener('hover-end', () => box.setAttribute('color', '#4CC3D9'));
-            box.addEventListener('grab-start', () => box.setAttribute('material', 'emissive', '#ffffff'));
+
+            box.addEventListener('grab-start', () => {
+                box.setAttribute('material', 'emissive', '#ffffff');
+                progress.grabbed = true;
+                refreshGuide();
+            });
+
             box.addEventListener('grab-end', () => box.setAttribute('material', 'emissive', '#000000'));
 
+            box.addEventListener('stretch-start', () => {
+                progress.stretched = true;
+                refreshGuide();
+            });
+
+            // Feedback click
             btn.addEventListener('click-start', () => {
                 btn.setAttribute('color', '#f1c40f');
                 box.setAttribute('color', '#e74c3c');
+                progress.clicked = true;
+                refreshGuide();
             });
+
             btn.addEventListener('click-end', () => btn.setAttribute('color', '#2ecc71'));
 
+            // Feedback drop
             zone.addEventListener('drag-drop', () => {
                 zone.setAttribute('color', '#2ecc71');
-                setTimeout(() => zone.setAttribute('color', '#888'), 800);
+                progress.dropped = true;
+                refreshGuide();
+                setTimeout(() => zone.setAttribute('color', '#888'), 900);
             });
+
+            refreshGuide();
         });
     </script>
 </body>
