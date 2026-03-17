@@ -259,17 +259,10 @@ AFRAME.registerComponent('stretchable', {
 
         this.initialScale = this.el.object3D.scale.clone();
         this.initialDistance = null;
+        this.baseColliderSize = null;
 
-        if (this.colliderType === 'obb-collider') {
-            const geometry = this.el.getAttribute('geometry');
-            if (geometry && geometry.primitive === 'box') {
-                this.baseColliderSize = {
-                    x: geometry.width || 1,
-                    y: geometry.height || 1,
-                    z: geometry.depth || 1
-                };
-            }
-        } else if (this.colliderType === 'sat-collider') {
+        // ✅ Para SAT guardamos el tamaño actual del collider al iniciar el stretch
+        if (this.colliderType === 'sat-collider') {
             const objectCollider = this.el.components['sat-collider'];
             if (objectCollider?.data?.size) {
                 this.baseColliderSize = {
@@ -347,46 +340,49 @@ AFRAME.registerComponent('stretchable', {
     },
 
     _updateColliderSize: function (newScale) {
-        if (!this.baseColliderSize) return;
-
+        // ✅ OBB: no modificar geometry (evita doble escalado acumulado)
         if (this.colliderType === 'obb-collider') {
-            const newSize = {
-                x: this.baseColliderSize.x * newScale.x,
-                y: this.baseColliderSize.y * newScale.y,
-                z: this.baseColliderSize.z * newScale.z
-            };
+            return;
+        }
 
-            this.el.setAttribute('geometry', {
-                width: newSize.x,
-                height: newSize.y,
-                depth: newSize.z
-            });
+        if (!this.baseColliderSize || this.colliderType !== 'sat-collider') return;
 
-        } else if (this.colliderType === 'sat-collider') {
-            const objectCollider = this.el.components['sat-collider'];
-            if (!objectCollider) return;
+        const objectCollider = this.el.components['sat-collider'];
+        if (!objectCollider) return;
 
-            const newColliderSize = {
-                x: this.baseColliderSize.x * newScale.x,
-                y: this.baseColliderSize.y * newScale.y,
-                z: this.baseColliderSize.z * newScale.z
-            };
+        // ✅ Escala RELATIVA al inicio del stretch (no absoluta)
+        const sx0 = Math.abs(this.initialScale.x) > 1e-6 ? this.initialScale.x : 1;
+        const sy0 = Math.abs(this.initialScale.y) > 1e-6 ? this.initialScale.y : 1;
+        const sz0 = Math.abs(this.initialScale.z) > 1e-6 ? this.initialScale.z : 1;
 
-            objectCollider.el.setAttribute('sat-collider', {
-                size: newColliderSize,
-                debug: objectCollider.data.debug
-            });
+        const relScale = {
+            x: newScale.x / sx0,
+            y: newScale.y / sy0,
+            z: newScale.z / sz0
+        };
 
-            objectCollider.obb.size.copy(new THREE.Vector3(newColliderSize.x, newColliderSize.y, newColliderSize.z));
+        const newColliderSize = {
+            x: this.baseColliderSize.x * relScale.x,
+            y: this.baseColliderSize.y * relScale.y,
+            z: this.baseColliderSize.z * relScale.z
+        };
+
+        objectCollider.el.setAttribute('sat-collider', {
+            size: newColliderSize,
+            debug: objectCollider.data.debug
+        });
+
+        if (objectCollider.obb) {
+            objectCollider.obb.size.set(newColliderSize.x, newColliderSize.y, newColliderSize.z);
             objectCollider.obb.halfSize.set(
                 newColliderSize.x / 2,
                 newColliderSize.y / 2,
                 newColliderSize.z / 2
             );
+        }
 
-            if (objectCollider.updateOBB) {
-                objectCollider.updateOBB();
-            }
+        if (objectCollider.updateOBB) {
+            objectCollider.updateOBB();
         }
     },
 
