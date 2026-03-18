@@ -158,6 +158,12 @@
             // Paso 1: colocación AR
             scene.addEventListener('ar-hit-test-select', () => {
                 root.setAttribute('visible', true);
+
+                // Fuerza orientacion fija (siempre del derecho)
+                requestAnimationFrame(() => {
+                    root.object3D.rotation.set(0, 0, 0);
+                });
+
                 progress.placed = true;
                 refreshGuide();
             });
