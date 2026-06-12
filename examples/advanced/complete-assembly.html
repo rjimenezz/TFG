@@ -24,53 +24,68 @@
         <a-entity camera position="0 1.6 0"></a-entity>
 
         <!-- Mesa -->
-        <a-plane id="table" position="0 0.7 -1" rotation="-90 0 0" width="2.2" height="1.1" color="#6a513f"></a-plane>
-        <a-box id="table-edge" position="0 0.69 -1" width="2.2" height="0.04" depth="1.15" color="#3e2e23"></a-box>
+        <a-plane id="table" position="0 1.15 -0.6" rotation="-90 0 0" width="2.8" height="1.1" color="#6a513f"></a-plane>
+        <a-box id="table-edge" position="0 1.14 -0.6" width="2.8" height="0.04" depth="1.15" color="#3e2e23"></a-box>
 
         <!-- Panel UI -->
-        <a-entity id="ui" position="0 1.35 -0.8">
-            <a-plane id="panel" width="2" height="0.33" color="#0b1d2a" opacity="0.85"
+        <a-entity id="ui" position="0 1.75 -0.7">
+            <a-plane id="panel" width="2" height="0.5" color="#0b1d2a" opacity="0.85"
                 material="transparent: true"></a-plane>
-            <a-entity id="instruction-text" position="0 0.07 0.01"
+            <a-entity id="instruction-text" position="0 0.14 0.01"
                 text="value: Paso 1: pulsa el boton para iniciar; align: center; color: #ffffff; width: 1.9;"></a-entity>
 
-            <a-box id="start-button" position="0 -0.06 0.03" width="1" height="0.14" depth="0.06" color="#1e90ff"
+            <a-box id="start-button" position="0 -0.12 0.03" width="1" height="0.14" depth="0.06" color="#1e90ff"
                 material="roughness: 0.3; metalness: 0.1"
                 clickable="maxClickers: 1; startGesture: pointstart; endGesture: pointend" hoverable></a-box>
-            <a-entity id="start-text" position="0 -0.06 0.08"
+            <a-entity id="start-text" position="0 -0.12 0.08"
                 text="value: Iniciar Ensamblaje; align: center; color: #ffffff; width: 2.2;"></a-entity>
         </a-entity>
 
         <!-- Piezas -->
         <a-entity id="pieces" visible="false">
-            <a-box id="piece-cube" class="piece cube" position="-0.5 0.85 -0.9" width="0.18" height="0.18" depth="0.18"
+            <a-box id="piece-cube" class="piece cube" position="-0.8 1.27 -0.5" width="0.12" height="0.12" depth="0.12"
                 color="#f39c12" material="roughness:0.3; metalness:0.2" grabbable draggable hoverable
                 stretchable></a-box>
 
-            <a-sphere id="piece-sphere" class="piece sphere" position="-0.25 0.85 -0.9" radius="0.12" color="#2ecc71"
+            <a-sphere id="piece-sphere" class="piece sphere" position="-0.4 1.35 -0.5" radius="0.18" color="#2ecc71"
                 material="roughness:0.3; metalness:0.2" grabbable draggable hoverable stretchable></a-sphere>
 
-            <a-box id="piece-rect" class="piece rect" position="0.05 0.85 -0.9" width="0.24" height="0.1" depth="0.1"
-                color="#9b59b6" material="roughness:0.3; metalness:0.2" scale="0.6 0.6 0.6" grabbable draggable
+            <a-box id="piece-rect" class="piece rect" position="0.0 1.25 -0.5" width="0.22" height="0.08" depth="0.08"
+                color="#9b59b6" material="roughness:0.3; metalness:0.2" grabbable draggable
                 hoverable stretchable></a-box>
         </a-entity>
 
         <!-- Moldes -->
         <a-entity id="slots" visible="false">
-            <a-plane id="mold-base" position="0.45 0.705 -1" rotation="-90 0 0" width="0.9" height="0.5"
+            <a-plane id="mold-base" position="0.7 1.155 -0.6" rotation="-90 0 0" width="1.0" height="0.5"
                 material="color:#00fff0; opacity:0.08; transparent:true"></a-plane>
 
-            <a-box id="slot-cube" class="slot" position="0.1 0.8 -1" width="0.16" height="0.16" depth="0.16"
-                material="color:#00fff0; opacity:0.25; transparent:true; emissive:#00fff0; emissiveIntensity:0.6"
-                droppable="accepts: .piece.cube"></a-box>
+            <!-- Slot Cubo (Visual y Colisionador Permisivo) -->
+            <a-entity id="slot-cube-container" position="0.3 1.25 -0.6">
+                <a-box id="slot-cube-visual" width="0.18" height="0.18" depth="0.18"
+                    material="color:#00fff0; opacity:0.25; transparent:true; emissive:#00fff0; emissiveIntensity:0.6"></a-box>
+                <a-box id="slot-cube" class="slot" width="0.45" height="0.45" depth="0.45"
+                    material="visible: false; transparent: true; opacity: 0"
+                    droppable="accepts: .piece.cube"></a-box>
+            </a-entity>
 
-            <a-sphere id="slot-sphere" class="slot" position="0.55 0.8 -1" radius="0.12"
-                material="color:#00fff0; opacity:0.25; transparent:true; emissive:#00fff0; emissiveIntensity:0.6"
-                droppable="accepts: .piece.sphere"></a-sphere>
+            <!-- Slot Esfera (Visual y Colisionador Permisivo) -->
+            <a-entity id="slot-sphere-container" position="0.7 1.25 -0.6">
+                <a-sphere id="slot-sphere-visual" radius="0.10"
+                    material="color:#00fff0; opacity:0.25; transparent:true; emissive:#00fff0; emissiveIntensity:0.6"></a-sphere>
+                <a-box id="slot-sphere" class="slot" width="0.45" height="0.45" depth="0.45"
+                    material="visible: false; transparent: true; opacity: 0"
+                    droppable="accepts: .piece.sphere"></a-box>
+            </a-entity>
 
-            <a-box id="slot-rect" class="slot" position="0.9 0.8 -1" width="0.22" height="0.08" depth="0.08"
-                material="color:#00fff0; opacity:0.25; transparent:true; emissive:#00fff0; emissiveIntensity:0.6"
-                droppable="accepts: .piece.rect"></a-box>
+            <!-- Slot Rectangulo (Visual y Colisionador Permisivo) -->
+            <a-entity id="slot-rect-container" position="1.1 1.25 -0.6">
+                <a-box id="slot-rect-visual" width="0.22" height="0.08" depth="0.08"
+                    material="color:#00fff0; opacity:0.25; transparent:true; emissive:#00fff0; emissiveIntensity:0.6"></a-box>
+                <a-box id="slot-rect" class="slot" width="0.45" height="0.45" depth="0.45"
+                    material="visible: false; transparent: true; opacity: 0"
+                    droppable="accepts: .piece.rect"></a-box>
+            </a-entity>
         </a-entity>
     </a-scene>
 
@@ -83,6 +98,11 @@
 
         const placed = new Set();
         let started = false;
+
+        const targetSizes = {
+            'slot-cube': new THREE.Vector3(0.18, 0.18, 0.18),
+            'slot-sphere': new THREE.Vector3(0.20, 0.20, 0.20)
+        };
 
         function setInstruction(text) {
             instructionText.setAttribute(
@@ -99,9 +119,9 @@
             return size;
         }
 
-        function isWithinSlot(piece, slot, tolerance = 0.25) {
+        function isWithinSlot(piece, targetSize, tolerance = 0.25) {
             const ps = getWorldSize(piece);
-            const ss = getWorldSize(slot);
+            const ss = targetSize;
             return (
                 Math.abs(ps.x - ss.x) <= ss.x * tolerance &&
                 Math.abs(ps.y - ss.y) <= ss.y * tolerance &&
@@ -113,6 +133,17 @@
             const pos = slot.object3D.getWorldPosition(new THREE.Vector3());
             piece.object3D.position.copy(pos);
             piece.setAttribute('rotation', slot.getAttribute('rotation'));
+            
+            // Ajustar la escala de las piezas automáticamente al tamaño del molde
+            if (piece.id === 'piece-cube') {
+                piece.setAttribute('scale', '1.5 1.5 1.5');
+            } else if (piece.id === 'piece-sphere') {
+                const s = 0.10 / 0.18;
+                piece.setAttribute('scale', `${s} ${s} ${s}`);
+            } else if (piece.id === 'piece-rect') {
+                piece.setAttribute('scale', '1 1 1');
+            }
+
             piece.removeAttribute('draggable');
             piece.removeAttribute('grabbable');
             piece.removeAttribute('hoverable');
@@ -120,10 +151,16 @@
         }
 
         function handleDrop(slot, piece, totalSlots) {
-            if (slot.id === 'slot-rect') {
-                const ok = isWithinSlot(piece, slot, 0.25);
+            if (slot.id === 'slot-cube') {
+                const ok = isWithinSlot(piece, targetSizes['slot-cube'], 0.25);
                 if (!ok) {
-                    setInstruction('Ajusta el rectangulo antes de soltar');
+                    setInstruction('Agranda el cubo antes de colocarlo');
+                    return;
+                }
+            } else if (slot.id === 'slot-sphere') {
+                const ok = isWithinSlot(piece, targetSizes['slot-sphere'], 0.25);
+                if (!ok) {
+                    setInstruction('Encoge la esfera antes de colocarla');
                     return;
                 }
             }
@@ -149,7 +186,7 @@
             started = true;
             pieces.setAttribute('visible', true);
             slots.setAttribute('visible', true);
-            setInstruction('Paso 2: agarra piezas y ajusta el rectangulo');
+            setInstruction('Paso 2: agranda el cubo, encoge la esfera y coloca las piezas');
         });
 
         startButton.addEventListener('hover-start', () => {
