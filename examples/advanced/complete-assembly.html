@@ -111,16 +111,23 @@
             );
         }
 
-        function getWorldSize(el) {
+        function getRealSize(el) {
             el.object3D.updateMatrixWorld(true);
-            const box = new THREE.Box3().setFromObject(el.object3D);
-            const size = new THREE.Vector3();
-            box.getSize(size);
-            return size;
+            const scale = el.object3D.scale;
+            if (el.tagName.toLowerCase() === 'a-sphere') {
+                const radius = parseFloat(el.getAttribute('radius')) || 0.5;
+                const diameter = radius * 2;
+                return new THREE.Vector3(diameter * scale.x, diameter * scale.y, diameter * scale.z);
+            } else {
+                const width = parseFloat(el.getAttribute('width')) || 1;
+                const height = parseFloat(el.getAttribute('height')) || 1;
+                const depth = parseFloat(el.getAttribute('depth')) || 1;
+                return new THREE.Vector3(width * scale.x, height * scale.y, depth * scale.z);
+            }
         }
 
         function isWithinSlot(piece, targetSize, tolerance = 0.25) {
-            const ps = getWorldSize(piece);
+            const ps = getRealSize(piece);
             const ss = targetSize;
             return (
                 Math.abs(ps.x - ss.x) <= ss.x * tolerance &&
@@ -130,11 +137,38 @@
         }
 
         function snapPieceToSlot(piece, slot) {
+            // 1. Remover componentes de interacción.
+            // Al remover 'grabbable', se ejecuta síncronamente su método de liberación,
+            // lo que devuelve el object3D de la pieza a su contenedor original en Three.js.
+            piece.removeAttribute('draggable');
+            piece.removeAttribute('grabbable');
+            piece.removeAttribute('hoverable');
+            piece.removeAttribute('stretchable');
+
+            // 2. Forzar actualización de matrices con su padre restaurado
+            if (piece.object3D.parent) {
+                piece.object3D.parent.updateMatrixWorld(true);
+            }
+            piece.object3D.updateMatrixWorld(true);
+
+            // 3. Copiar la posición del slot convertida a coordenadas locales del padre
             const pos = slot.object3D.getWorldPosition(new THREE.Vector3());
+            if (piece.object3D.parent) {
+                piece.object3D.parent.worldToLocal(pos);
+            }
             piece.object3D.position.copy(pos);
-            piece.setAttribute('rotation', slot.getAttribute('rotation'));
             
-            // Ajustar la escala de las piezas automáticamente al tamaño del molde
+            // 4. Copiar la rotación del slot convertida a coordenadas locales del padre
+            const rot = slot.object3D.getWorldQuaternion(new THREE.Quaternion());
+            if (piece.object3D.parent) {
+                const parentRot = piece.object3D.parent.getWorldQuaternion(new THREE.Quaternion());
+                const localRot = parentRot.clone().invert().multiply(rot);
+                piece.object3D.quaternion.copy(localRot);
+            } else {
+                piece.object3D.quaternion.copy(rot);
+            }
+
+            // 5. Ajustar la escala de las piezas automáticamente al tamaño del molde
             if (piece.id === 'piece-cube') {
                 piece.setAttribute('scale', '1.5 1.5 1.5');
             } else if (piece.id === 'piece-sphere') {
@@ -143,11 +177,6 @@
             } else if (piece.id === 'piece-rect') {
                 piece.setAttribute('scale', '1 1 1');
             }
-
-            piece.removeAttribute('draggable');
-            piece.removeAttribute('grabbable');
-            piece.removeAttribute('hoverable');
-            piece.removeAttribute('stretchable');
         }
 
         function handleDrop(slot, piece, totalSlots) {
